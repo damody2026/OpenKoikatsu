@@ -214,6 +214,8 @@ public:
  TArray<FLinearColor> ItemColorOverrides;
  /** Item shadow colour override (sRGB; the item_draw materials' _ShadowColor, Studio's item shadow colour), set before LoadSession; alpha < 0: keep the model's. */
  FLinearColor ItemShadowColorOverride=FLinearColor(1.f,1.f,1.f,-1.f);
+ /** Item outline colour override (sRGB; the item_draw outline's _LineColor, Studio's item line colour), set before LoadSession; alpha < 0: keep the model's. */
+ FLinearColor ItemLineColorOverride=FLinearColor(1.f,1.f,1.f,-1.f);
  /** Studio item alpha (< 1: the item_draw parts blend with this opacity), set before LoadSession. */
  float ItemAlpha=1.f;
  /** false: no outline shell on any part (a Studio item made without outline, ItemComponent.defLineWidth 0). */
@@ -757,10 +759,10 @@ public:
 		int32 Submesh = 0;
 	};
 	TArray<FBlendedPart> BlendedParts;
-	/** Parts drawn opaque here whose material's Unity render queue is past 2500 (Studio's basic shapes, queue 3000):
-	 *  Unity's camera depth texture holds only queues up to 2500, so effects reading it (SunShafts) see past them. */
-	TArray<TWeakObjectPtr<UPrimitiveComponent>> DepthTextureAbsentParts;
-	/** A part's material reads Unity's depth texture (StylizedWater's depth): the scene marks the absent parts for it. */
+	/** The parts Unity's camera depth texture holds (opaque up to queue 2500, and StylizedWater, which writes it at 2500):
+	 *  the scene draws them into custom depth, which then stands in for that texture (what lies behind an absent part). */
+	TArray<TWeakObjectPtr<UPrimitiveComponent>> DepthTexturePresentParts;
+	/** A part's material reads Unity's depth texture (StylizedWater's depth): the scene draws the present parts for it. */
 	bool bReadsUnityDepthTexture = false;
 	UTextureRenderTarget2D* RenderTextureFor(FOkSession& Source, int32 PartIndex);
 	void StopRenderTextureCaptures();

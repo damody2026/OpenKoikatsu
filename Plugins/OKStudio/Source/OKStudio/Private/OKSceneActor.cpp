@@ -263,6 +263,10 @@ namespace
 			Add(FString::Printf(TEXT("_patternclamp%d"), Slot), EOKMaterialOverrideKind::Scalar, P.bClamp ? 1.f : 0.f, FLinearColor::White, nullptr);
 			Add(FString::Printf(TEXT("_Color%d_2"), Slot), EOKMaterialOverrideKind::Color, 0.f, P.Color, nullptr);
 		}
+		// Studio's item emission colour / power (ItemComponent.SetLineAndEmission), on the materials that have those
+		// inputs; the Material Editor edits below still win. (The outline colour goes to the item_draw outline itself.)
+		if (Item.EmissionColor.A >= 0.f) Add(TEXT("_EmissionColor"), EOKMaterialOverrideKind::Color, 0.f, FLinearColor(Item.EmissionColor.R, Item.EmissionColor.G, Item.EmissionColor.B, 1.f), nullptr);
+		if (Item.EmissionPower >= 0.f) Add(TEXT("_EmissionIntensity"), EOKMaterialOverrideKind::Scalar, Item.EmissionPower, FLinearColor::White, nullptr);
 		// Material Editor edits: the named material's property (Material Editor drops the leading underscore). Shader and
 		// renderer edits change how the item is built (ItemBuildJson).
 		for (const FOKSceneMaterialEdit& E : Item.MaterialEdits)
@@ -369,6 +373,7 @@ namespace
 			// Studio item state the materials are made with: shadow colour, fading, outline (ItemComponent defaults).
 			const FOKStudioCatalogItem* Entry = Item->No >= 0 ? FOKStudioCatalog::Get().FindItem(Item->Group, Item->Category, Item->No) : nullptr;
 			Actor->ItemShadowColorOverride = Item->ShadowColor;
+			Actor->ItemLineColorOverride = Item->LineColor;
 			Actor->ItemAlpha = !Entry || Entry->bAlpha ? Item->Alpha : 1.f;
 			// The game writes the scene line width to _LineWidthS (ItemComponent.UpdateColor); 0 draws no outline.
 			Actor->bItemOutline = Item->LineWidth > 0.f;
@@ -495,7 +500,14 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 			if (OutError.Contains(TEXT("has no meshes"))) { OutError.Reset(); AddRenderCamera(Model, Prefab, Out); return true; }
 			return false;
 		}
-		AKKPreviewActor* Actor = SpawnPreview(World, MoveTemp(Session), OutError, Object.Item.Colors, PatternOverrides(Object.Item), &Object.Item, false,
+		// A mod item made entirely with Unity's Standard shader (buildings, ground pieces) is lit as Standard is: the
+		// item program's toon shading ignores its _Color, _Metallic and the light's angle (83283571_p1's concrete ground
+		// under the water drew 1.8 times the native brightness). It draws with the map materials' Standard graph instead,
+		// still on the items' lighting channel (Studio's character light).
+		bool bStandardItem = Session.PartCount() > 0;
+		for (int32 Part = 0; Part < Session.PartCount() && bStandardItem; ++Part)
+			bStandardItem = Session.MaterialShaderName(Part).StartsWith(TEXT("Standard"), ESearchCase::IgnoreCase);
+		AKKPreviewActor* Actor = SpawnPreview(World, MoveTemp(Session), OutError, Object.Item.Colors, PatternOverrides(Object.Item), &Object.Item, bStandardItem,
 			Document ? Document->Post.ShaderGlobals() : TMap<FName, FLinearColor>(), Document ? Document->Post.RampG : -1);
 		if (!Actor) return false;
 		Out.Preview = Actor;
@@ -817,9 +829,12 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 		if (Actor->SetUserFk(Bones, Euler)) Item.AppliedFk = C.Fk;
 		else Errors.Add(Object.Id, TEXT("FK not applied"));
 	}
-	if (C.Ik != Item.AppliedIk || C.IkPartsOff != Item.AppliedIkPartsOff)
+	if (C.Ik != Item.AppliedIk || C.IkPartsOff != Item.AppliedIkPartsOff || C.IkWeight != Item.AppliedIkWeight)
 	{
 		Item.AppliedIkPartsOff = C.IkPartsOff;
+		Item.AppliedIkWeight = C.IkWeight;
+		const float Whole = FMath::Clamp(C.IkWeight, 0.f, 1.f);
+		TArray<float> TurnWeights;
 		TArray<int32> Effectors;
 		TArray<FVector> Positions;
 		TArray<FQuat> Rotations;
@@ -830,7 +845,8 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
             // A switched-off part's targets are kept but do not pull.
             if (!C.IkPartOn(FOKSceneCharacter::IkPartOf(T.Effector))) continue;
             Effectors.Add(T.Effector);
-            Weights.Add(T.Weight);
+            Weights.Add(FMath::Clamp(T.Weight, 0.f, 1.f) * Whole);
+            TurnWeights.Add(FMath::Clamp(T.RotationWeight, 0.f, 1.f) * Whole);
             Positions.Add(AKKPreviewActor::ActorLocalToUnity(T.Position));
             const FQuat U = FOKStudioImport::UnityToUe(FVector::ZeroVector,T.Euler,FVector::OneVector).GetRotation();
             Rotations.Add(FQuat(-U.X,U.Z,U.Y,U.W));
@@ -839,11 +855,24 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 		FString Error;
 		if (Actor->SetStudioIk(Effectors, Positions, Error, Rotations, UseRotations))
 		{
-			// Weights after the targets (setting targets resets them to 1); all-1 needs no call.
-			if (Weights.ContainsByPredicate([](float W) { return W < 1.f; })) Actor->Session.SetStudioIkWeights(Weights);
+			// Weights after the targets (setting targets resets them to 1); all-1 needs no call. Rotation weights apart from
+			// the position ones go after them (twice as many weights as targets).
+			if (TurnWeights != Weights) { Weights.Append(TurnWeights); Actor->Session.SetStudioIkWeights(Weights); }
+			else if (Weights.ContainsByPredicate([](float W) { return W < 1.f; })) Actor->Session.SetStudioIkWeights(Weights);
 			Item.AppliedIk = C.Ik;
 		}
 		else Errors.Add(Object.Id, TEXT("IK not applied: ") + Error);
+	}
+	// Joint correction: the eight Studio categories, bust (8) and accessory follow (9) always on.
+	const int32 Joints = (C.JointCorrection & 0xff) | 0x300;
+	if (Joints != Item.AppliedJointCorrection)
+	{
+		if (Actor->Session.SetExpressionMask(uint32(Joints)))
+		{
+			Item.AppliedJointCorrection = Joints;
+			Actor->bUserPoseDirty = true;
+		}
+		else Errors.Add(Object.Id, TEXT("joint correction not applied"));
 	}
     const TArray<FQuat> Neck = C.NeckLook == EOKSceneLook::Fixed ? C.FixedNeck : TArray<FQuat>();
     if (Neck != Item.AppliedFixedNeck)
@@ -1758,18 +1787,20 @@ void AOKSceneActor::PlaceBackground(const FTransform& View, float Fov, float Asp
 		TMap<TWeakObjectPtr<UPrimitiveComponent>, TPair<int32, int32>> Ranks;
 		for (const FRankedPart& Ranked : BlendedParts) if (Ranked.Part.IsValid()) Ranks.Add(Ranked.Part, {Ranked.Rank, Ranked.BasePriority});
 		BlendedParts.Reset();
-		if (bDepthTextureAbsentMarked)
-			for (const TWeakObjectPtr<UPrimitiveComponent>& Part : DepthTextureAbsentParts)
+		if (bDepthTextureMarked)
+			for (const TWeakObjectPtr<UPrimitiveComponent>& Part : DepthTexturePresentParts)
 				if (UPrimitiveComponent* P = Part.Get()) P->SetRenderCustomDepth(false);
-		DepthTextureAbsentParts.Reset();
-		bDepthTextureAbsentMarked = false;
+		DepthTexturePresentParts.Reset();
+		bDepthTextureMarked = false;
 		bDepthTextureReaders = false;
+		for (const auto& MapPreview : ShownMapPreviews)
+			if (AKKPreviewActor* Preview = MapPreview.Get()) DepthTexturePresentParts.Append(Preview->DepthTexturePresentParts);
 		for (const TPair<int32, FShown>& It : Shown)
 			if (AKKPreviewActor* Preview = It.Value.Preview.Get())
 			{
 				TInlineComponentArray<UPrimitiveComponent*> Primitives(Preview);
 				for (UPrimitiveComponent* P : Primitives) if (P->ComponentHasTag(TEXT("OKSkyDome"))) SkyDomeParts.Add(P);
-				DepthTextureAbsentParts.Append(Preview->DepthTextureAbsentParts);
+				DepthTexturePresentParts.Append(Preview->DepthTexturePresentParts);
 				bDepthTextureReaders |= Preview->bReadsUnityDepthTexture;
 				for (const AKKPreviewActor::FBlendedPart& Blended : Preview->BlendedParts)
 					if (Blended.Component.IsValid())
@@ -1798,23 +1829,24 @@ void AOKSceneActor::PlaceBackground(const FTransform& View, float Fov, float Asp
 		if (UPrimitiveComponent* P = Part.Get())
 			P->SetTranslucentSortPriority(-30000 + FMath::Clamp(int32(FVector::Dist(View.GetLocation(), P->Bounds.Origin) / 100.0), 0, 20000));
 	RankBlendedParts(View.GetLocation());
-	MarkDepthTextureAbsent();
+	MarkDepthTexture();
 	PlaceSky(View);
 }
 
-void AOKSceneActor::MarkDepthTextureAbsent()
+void AOKSceneActor::MarkDepthTexture()
 {
 	// Only while something reads Unity's depth texture (SunShafts, StylizedWater's depth): a custom depth pass more.
-	const bool bWant = Document && (Document->Post.bSunShafts || bDepthTextureReaders) && DepthTextureAbsentParts.Num();
-	if (bWant == bDepthTextureAbsentMarked) return;
-	bDepthTextureAbsentMarked = bWant;
+	const bool bWant = Document && (Document->Post.bSunShafts || bDepthTextureReaders) && DepthTexturePresentParts.Num();
+	if (bWant == bDepthTextureMarked) return;
+	bDepthTextureMarked = bWant;
 	if (bWant) EnableCustomDepthStencil();
-	for (const TWeakObjectPtr<UPrimitiveComponent>& Part : DepthTextureAbsentParts)
+	for (const TWeakObjectPtr<UPrimitiveComponent>& Part : DepthTexturePresentParts)
 		if (UPrimitiveComponent* P = Part.Get())
 		{
 			P->SetRenderCustomDepth(bWant);
-			// Past the blended parts' ranks (1-255 tested below their own rank), so their test never sees these.
-			if (bWant) P->SetCustomDepthStencilValue(255);
+			// Stencil 0: the blended parts' test (a rank 1-255 below their own) never takes these for a blended part drawn
+			// before them; where these are nearer, the scene depth hides the blended part anyway.
+			if (bWant) P->SetCustomDepthStencilValue(0);
 		}
 }
 

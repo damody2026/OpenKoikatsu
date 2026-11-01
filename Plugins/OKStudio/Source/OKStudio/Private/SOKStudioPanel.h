@@ -348,7 +348,7 @@ public:
 			{
 				Game->ReleaseSceneResources();
 				Game->Document->Objects.Reset(); Game->Document->Tracks.Reset(); Game->Document->Bookmarks.Reset(); Game->Document->NextId = 1; Game->Document->ActiveCamera = -1;
-				Game->Document->Map = -1; Game->Document->Post = FOKScenePost(); Game->Document->Sound = FOKSceneSound(); Game->File.Reset();
+				Game->Document->Map = -1; Game->Document->Post = FOKScenePost(); Game->Document->Sound = FOKSceneSound(); Game->Document->FreeView = FOKSceneCamera(); Game->File.Reset();
 				// The timeline starts over too (the playhead stayed where the last scene was paused).
 				Game->Document->Duration = 10.f; Game->bTimelinePlaying = false; Game->TimelineTime = Game->Document->Playhead = 0.f; Game->LoopStart = Game->LoopEnd = 0.f;
 				SaveAsName = FDateTime::Now().ToString(TEXT("scene_%Y%m%d_%H%M%S")); // not the last scene's name to overwrite
@@ -370,6 +370,7 @@ public:
 		Float_(TEXT("scene.backups"), TEXT("備份恢復"), TEXT("backups"));
 		Float_(TEXT("scene.recent"), TEXT("最近的場景"), TEXT("recent"));
 		Float_(TEXT("app.material"), TEXT("材質編輯器"), TEXT("material"));
+		AddCommand(TEXT("material.export"), TEXT("匯出道具的 UV／OBJ／貼圖（參數 uv、obj、textures）"), [this](const FString& Arg) { return ExportMaterial(Arg); });
 		Float_(TEXT("app.animcontrol"), TEXT("動畫控制器"), TEXT("animctl"));
 		Float_(TEXT("app.bgm"), TEXT("背景音樂"), TEXT("bgm"));
 		Float_(TEXT("app.voice"), TEXT("語音"), TEXT("voice"));
@@ -380,6 +381,24 @@ public:
 		Simple(TEXT("view.helpers"), TEXT("隱藏全部輔助"), [this] { Game->bHideHelpers = !Game->bHideHelpers; SetStatus(Game->bHideHelpers ? TEXT("輔助全部隱藏（再按一次顯示）") : TEXT("輔助顯示")); });
 		Float_(TEXT("scene.report"), TEXT("讀取報告"), TEXT("report"));
 		Float_(TEXT("scene.resources"), TEXT("資源檢查"), TEXT("resources"));
+		// 補齊後重試 (HS2Studio6 资源检查): the characters that did not show (or every one, when all did) are read again, so
+		// zipmods installed meanwhile are found.
+		Simple(TEXT("scene.reloadcharacters"), TEXT("重新讀取角色"), [this]
+		{
+			if (!Game.IsValid() || !Game->SceneActor) return;
+			TArray<int32> Failed, All;
+			for (const FOKSceneObject& O : Game->Document->Objects)
+				if (O.Kind == EOKSceneObjectKind::Character)
+				{
+					All.Add(O.Id);
+					if (!Game->SceneActor->PreviewOf(O.Id) || Game->SceneActor->Errors.Contains(O.Id)) Failed.Add(O.Id);
+				}
+			const TArray<int32>& Again = Failed.IsEmpty() ? All : Failed;
+			for (int32 Id : Again) { Game->SceneActor->Errors.Remove(Id); Game->SceneActor->Rebuild(Id); }
+			Game->SyncDocumentNow();
+			DeferFloat(TEXT("resources"));
+			SetStatus(FString::Printf(TEXT("重新讀取 %d 個角色"), Again.Num()));
+		});
 		// Adding objects.
 		Simple(TEXT("add.folder"), TEXT("資料夾"), [this] { Game->Add(EOKSceneObjectKind::Folder); AddedStatus(); });
 		AddCommand(TEXT("add.character"), TEXT("角色"), [this](const FString& Arg)
@@ -392,6 +411,12 @@ public:
 			TArray<FString> P; Arg.Replace(TEXT("/"), TEXT(" ")).ParseIntoArray(P, TEXT(" "));
 			if (P.Num() < 3) { SetPage(EPage::ItemAdd); return true; }
 			return AddItemTo(FCString::Atoi(*P[0]), FCString::Atoi(*P[1]), FCString::Atoi(*P[2]), P.Num() > 3 && P[3] == TEXT("child"));
+		});
+		AddCommand(TEXT("add.defaultcharacter"), TEXT("加入預設角色（參數 female／male）"), [this](const FString& Arg)
+		{
+			const FString Card = DefaultCard(Arg == TEXT("male") ? 0 : 1);
+			if (Card.IsEmpty()) { SetStatus(TEXT("沒有預設角色卡：在角色卡窗選一張卡按「設為預設角色」")); return false; }
+			return AddOrReplaceCard(Card, false);
 		});
 		AddCommand(TEXT("add.light"), TEXT("燈光"), [this](const FString& Arg)
 		{
@@ -491,6 +516,7 @@ public:
 		Float_(TEXT("app.settings"), TEXT("設定"), TEXT("settings"));
 		Float_(TEXT("app.screenshot"), TEXT("截圖"), TEXT("shot"));
 		Float_(TEXT("app.quicksearch"), TEXT("快搜"), TEXT("quick"));
+		Simple(TEXT("catalog.reload"), TEXT("刷新目錄"), [this] { ReloadCatalog(); });
 		Float_(TEXT("app.poselibrary"), TEXT("姿勢庫"), TEXT("poselib"));
 		Float_(TEXT("app.story"), TEXT("播放故事"), TEXT("stories"));
 		AddCommand(TEXT("window.open"), TEXT("開視窗"), [this](const FString& Arg) { if (!Floats.Contains(Arg)) return false; OpenFloat(Arg); return true; });
@@ -563,6 +589,9 @@ public:
 		// Pose.
 		AddCommand(TEXT("pose.mirror"), TEXT("鏡像姿勢"), [this](const FString& Arg) { FOKSceneObject* X = Obj(); return X && MirrorPose(*X, Arg == TEXT("l2r") ? 1 : Arg == TEXT("r2l") ? 2 : 0); });
 		Simple(TEXT("pose.ikfromfk"), TEXT("IK←FK"), [this] { if (FOKSceneObject* X = Obj()) IkFromFk(*X); });
+		Simple(TEXT("pose.ikfromanim"), TEXT("IK←動作"), [this] { if (FOKSceneObject* X = Obj()) IkFromAnimation(*X); });
+		AddCommand(TEXT("pose.fkinit"), TEXT("FK 部位初始化（參數：部位 0..6）"), [this](const FString& Arg) { FOKSceneObject* X = Obj(); if (!X || X->Kind != EOKSceneObjectKind::Character) return false; FkFromPose(*X, FMath::Clamp(FCString::Atoi(*Arg), 0, 6)); return true; });
+		AddCommand(TEXT("pose.ikreset"), TEXT("IK 部位復位（參數：部位 0..4）"), [this](const FString& Arg) { FOKSceneObject* X = Obj(); if (!X || X->Kind != EOKSceneObjectKind::Character) return false; IkFromFk(*X, FMath::Clamp(FCString::Atoi(*Arg), 0, 4)); return true; });
 		Simple(TEXT("pose.fkfrompose"), TEXT("FK←目前姿勢"), [this] { if (FOKSceneObject* X = Obj()) FkFromPose(*X); });
 		Simple(TEXT("pose.fkfromik"), TEXT("FK←IK"), [this] { if (FOKSceneObject* X = Obj()) FkFromIk(*X); });
 		Simple(TEXT("pose.copy"), TEXT("複製姿勢"), [this] { if (const FOKSceneObject* X = Obj(); X && X->Kind == EOKSceneObjectKind::Character) { PoseClipFk = X->Character.Fk; PoseClipIk = X->Character.Ik; bHasPoseClip = true; SetStatus(TEXT("已複製姿勢")); } });
@@ -1292,6 +1321,11 @@ public:
 	TArray<FString> CardRoots() const;
 	void ScanCardFolder();
 	TSharedRef<SWidget> BuildCardBrowser();
+	/** The card browser's 女／男 filter (KK sex: 1 female, 0 male; -1 all). */
+	int32 CardSexFilter = -1;
+	/** A card's sex (cached per file version; -1 unreadable) and the default card of a sex (settings, else Demo). */
+	static int32 CardSex(const FString& Card);
+	static FString DefaultCard(int32 Sex);
 	bool AddOrReplaceCard(const FString& Card, bool bReplace);
 
 	// --- Items: search, hover preview, middle click adds as a child (U3-2). ---
@@ -1312,6 +1346,10 @@ public:
 	TArray<FHit> SearchCatalog(const FString& Query, const TArray<FString>& Kinds, int32 Limit, bool bHidden = false) const;
 	FString QuickQuery;
 	int32 QuickMode = 0;
+	/** The quick search's kind filter (item, effect, map, anim, pose, card; empty: all). */
+	FString QuickKind;
+	/** 刷新目录: reread the Studio catalogue files and rebuild what lists them. */
+	void ReloadCatalog();
 	TArray<TSharedPtr<FHit>> QuickHits;
 	TSharedPtr<SListView<TSharedPtr<FHit>>> QuickList;
 	void RunQuickSearch();
@@ -1338,8 +1376,14 @@ public:
 	bool LookPointScreen(FVector2D& Out) const;
 	void DragLookPoint(const FVector2D& Delta);
 	bool MirrorPose(FOKSceneObject& X, int32 Mode);
-	void IkFromFk(FOKSceneObject& X);
-	void FkFromPose(FOKSceneObject& X);
+	/** The FK / IK pages' handle and point size sliders (HS2Studio6 操作轴／控制点; the settings' values). */
+	void HandleSizes();
+	/** IK targets onto where the limbs are under FK; Part >= 0: only that IK part's targets (HS2Studio6 IK 复位). */
+	void IkFromFk(FOKSceneObject& X, int32 Part = -1);
+	/** IK targets onto where the animation alone (no FK, no IK) puts the limbs (HS2Studio6 动画位置姿态). */
+	void IkFromAnimation(FOKSceneObject& X);
+	/** FK values from the current pose; Part >= 0: only that FK part (HS2Studio6 FK 初始化). */
+	void FkFromPose(FOKSceneObject& X, int32 Part = -1);
 	void FkFromIk(FOKSceneObject& X);
 	TArray<FOKSceneFkBone> PoseClipFk;
 	TArray<FOKSceneIkTarget> PoseClipIk;
@@ -1375,6 +1419,10 @@ public:
 
 	// --- Scene files (U7). ---
 	FString SceneFolder, SceneSearch, ScenePick, SceneNewName, SaveAsName;
+	/** The scene browser lists the folders inside the current one too (包含子資料夾). */
+	bool bSceneRecursive = false;
+	/** The scene browser's page (100 scenes a page). */
+	int32 ScenePage = 0;
 	int32 SceneSort = 0;
 	bool bSceneSaveMode = false;
 	TArray<FString> SceneList;
@@ -1427,6 +1475,13 @@ public:
 	TSharedRef<SWidget> BuildMaterialEditor();
 	int32 MaterialPart = 0;
 	FString MaterialFilter;
+	/** A material's edits copied for 貼上改動, and the PNG path the texture slots' 載入 reads. */
+	TArray<FOKSceneMaterialEdit> MaterialClipboard;
+	FString MaterialTexturePath;
+	/** Saved/OKStudio/MaterialExport/<item id>_<name>/ (made when missing). */
+	FString MaterialExportDir(int32 ItemId) const;
+	/** The selected item's exports: "uv" (the picked renderer's UV layout PNG), "obj" (every renderer), "textures". */
+	bool ExportMaterial(const FString& What);
 	TPair<int32, int32> MaterialShown = { -2, 0 }; // selection and its part count the window shows
 	FString AnimCtlShown; // selection and animation parameters the animation controller shows
 	int32 VoiceGroupPick = 0, VoiceCategoryPick = 0, VoiceListPick = -1; // the voice window's browsed personality / category and picked list entry
@@ -1895,6 +1950,15 @@ public:
 				if (!Entry || Entry->bAlpha)
 					Float(TEXT("透明度"), [](FOKSceneObject& X) { return X.Item.Alpha; }, [](FOKSceneObject& X, float V) { X.Item.Alpha = FMath::Clamp(V, 0.f, 1.f); }, 0.f, 1.f, 0.05f);
 				Float(TEXT("描邊寬度"), [](FOKSceneObject& X) { return X.Item.LineWidth; }, [](FOKSceneObject& X, float V) { X.Item.LineWidth = FMath::Max(V, 0.f); }, 0.f, 2.f, 0.05f);
+				// Studio's item light cancel, emission and outline colour (-1 / alpha < 0: the model's) and its animation
+				// (pattern, start time 0..1, speed) — the clock children hung on its animated points follow.
+				ColorRow(TEXT("描邊顏色"), [](FOKSceneObject& X) { return X.Item.LineColor; }, [](FOKSceneObject& X, const FLinearColor& C) { X.Item.LineColor = C; });
+				ColorRow(TEXT("發光顏色"), [](FOKSceneObject& X) { return X.Item.EmissionColor; }, [](FOKSceneObject& X, const FLinearColor& C) { X.Item.EmissionColor = C; });
+				Float(TEXT("發光強度（-1 原本）"), [](FOKSceneObject& X) { return X.Item.EmissionPower; }, [](FOKSceneObject& X, float V) { X.Item.EmissionPower = V < 0.f ? -1.f : V; }, -1.f, 10.f, 0.05f);
+				Float(TEXT("光源取消（-1 原本）"), [](FOKSceneObject& X) { return X.Item.LightCancel; }, [](FOKSceneObject& X, float V) { X.Item.LightCancel = V < 0.f ? -1.f : FMath::Min(V, 1.f); }, -1.f, 1.f, 0.05f);
+				Float(TEXT("動作模式"), [](FOKSceneObject& X) { return float(X.Item.AnimePattern); }, [](FOKSceneObject& X, float V) { X.Item.AnimePattern = FMath::Clamp(FMath::RoundToInt(V), 0, 99); }, 0.f, 99.f, 1.f);
+				Float(TEXT("動畫起點 0～1"), [](FOKSceneObject& X) { return X.Item.AnimeTime; }, [](FOKSceneObject& X, float V) { X.Item.AnimeTime = FMath::Clamp(V, 0.f, 1.f); }, 0.f, 1.f, 0.01f);
+				Float(TEXT("動畫速度"), [](FOKSceneObject& X) { return X.Item.AnimeSpeed; }, [](FOKSceneObject& X, float V) { X.Item.AnimeSpeed = FMath::Max(V, 0.f); }, 0.f, 10.f, 0.05f);
 				// Material Editor style edits: material (empty: every material), shader property, and a colour (#RRGGBB or
 				// #RRGGBBAA, sRGB) or a number; imported textures, texture scale/offset, shaders and renderer switches are
 				// shown and can be deleted. Changing them rebuilds the item.
@@ -2023,7 +2087,7 @@ public:
 			Label(TEXT("相機"));
 			Float(TEXT("視角"), [](FOKSceneObject& X) { return X.Camera.Fov; }, [](FOKSceneObject& X, float V) { X.Camera.Fov = V; }, 5.f, 170.f, 1.f);
 			Float(TEXT("近面 cm（0 預設）"), [](FOKSceneObject& X) { return X.Camera.Near; }, [](FOKSceneObject& X, float V) { X.Camera.Near = FMath::Max(V, 0.f); }, 0.f, 500.f, 0.5f);
-			Float(TEXT("遠面 cm（正交時套用）"), [](FOKSceneObject& X) { return X.Camera.Far; }, [](FOKSceneObject& X, float V) { X.Camera.Far = FMath::Max(V, 0.f); }, 0.f, 1000000.f, 100.f);
+			Float(TEXT("遠面 cm（0 無）"), [](FOKSceneObject& X) { return X.Camera.Far; }, [](FOKSceneObject& X, float V) { X.Camera.Far = FMath::Max(V, 0.f); }, 0.f, 1000000.f, 100.f);
 			Check(TEXT("正交"), [](FOKSceneObject& X) { return X.Camera.bOrtho; }, [](FOKSceneObject& X, bool V) { X.Camera.bOrtho = V; });
 			Float(TEXT("正交寬度 cm"), [](FOKSceneObject& X) { return X.Camera.OrthoWidth; }, [](FOKSceneObject& X, float V) { X.Camera.OrthoWidth = FMath::Max(V, 1.f); }, 1.f, 100000.f, 5.f);
 			Props->AddSlot().AutoHeight().Padding(0.f, 2.f)
@@ -2457,8 +2521,25 @@ public:
 		{
 			Float(TEXT("視野角度"), [](FOKSceneObject& X) { return X.Camera.Fov; }, [](FOKSceneObject& X, float V) { X.Camera.Fov = V; }, 5.f, 170.f, 1.f);
 			Float(TEXT("近面 cm"), [](FOKSceneObject& X) { return X.Camera.Near; }, [](FOKSceneObject& X, float V) { X.Camera.Near = FMath::Max(V, 0.f); }, 0.f, 500.f, 0.5f);
+			Float(TEXT("遠面 cm（0 無）"), [](FOKSceneObject& X) { return X.Camera.Far; }, [](FOKSceneObject& X, float V) { X.Camera.Far = FMath::Max(V, 0.f); }, 0.f, 1000000.f, 100.f);
 			Check(TEXT("正交"), [](FOKSceneObject& X) { return X.Camera.bOrtho; }, [](FOKSceneObject& X, bool V) { X.Camera.bOrtho = V; });
 			Float(TEXT("正交寬度 cm"), [](FOKSceneObject& X) { return X.Camera.OrthoWidth; }, [](FOKSceneObject& X, float V) { X.Camera.OrthoWidth = FMath::Max(V, 1.f); }, 1.f, 100000.f, 5.f);
+		}
+		// The free view's own lens (HS2Studio6 当前视口镜头), saved with the scene.
+		if (!Active && Game.IsValid())
+		{
+			Label(TEXT("自由視角鏡頭"));
+			auto Lens = [this]() -> FOKSceneCamera& { return Game->Document->FreeView; };
+			auto Number = [this, Lens](const TCHAR* Name, float FOKSceneCamera::*Field, float Min, float Max, float Delta)
+			{
+				Row(Name, Spin([Lens, Field] { return Lens().*Field; }, [this, Lens, Field, Min, Max](float V) { Lens().*Field = FMath::Clamp(V, Min, Max); Changed(); }, Min, Max, Delta));
+			};
+			Number(TEXT("視野角度"), &FOKSceneCamera::Fov, 5.f, 170.f, 1.f);
+			Number(TEXT("近面 cm"), &FOKSceneCamera::Near, 0.f, 500.f, 0.5f);
+			Number(TEXT("遠面 cm（0 無）"), &FOKSceneCamera::Far, 0.f, 1000000.f, 100.f);
+			Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[CheckBox(TEXT("正交"), [Lens] { return Lens().bOrtho; }, [this, Lens](bool B) { Lens().bOrtho = B; Changed(); })];
+			Number(TEXT("正交寬度 cm"), &FOKSceneCamera::OrthoWidth, 1.f, 100000.f, 5.f);
+			Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[Button(FText::FromString(TEXT("鏡頭重設")), [this, Lens] { Lens() = FOKSceneCamera(); Changed(); }, 0.f, 18.f, false, 10.f)];
 		}
 		Label(TEXT("視角"));
 		Buttons({ { TEXT("聚焦所選"), TEXT("camera.focus") }, { TEXT("初始"), TEXT("camera.reset") }, { TEXT("前"), TEXT("camera.front") }, { TEXT("側"), TEXT("camera.side") }, { TEXT("上"), TEXT("camera.top") } });

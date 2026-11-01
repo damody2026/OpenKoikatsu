@@ -260,6 +260,7 @@ pub unsafe extern "C" fn ok_session_set_studio_ik_pose(
     0
 }
 /// Studio IK weights 0..1, one per target of the last set_studio_ik(_pose) call, in its order; 0 count: all 1.
+/// Twice the targets: the second half are the hand / foot rotation weights (otherwise rotation follows position).
 #[no_mangle]
 pub unsafe extern "C" fn ok_session_set_studio_ik_weights(s: *mut OkSession, weights: *const f32, count: i32) -> i32 {
     let Some(s) = sess_ref(s) else { return -1; };
@@ -267,6 +268,15 @@ pub unsafe extern "C" fn ok_session_set_studio_ik_weights(s: *mut OkSession, wei
     let w = if count > 0 { std::slice::from_raw_parts(weights, count as usize) } else { &[] };
     if !w.iter().all(|v| v.is_finite()) { return -1; }
     s.studio_ik_weights = w.to_vec();
+    0
+}
+/// A Studio character's joint correction: ExpressionBone runs every frame with these categories, bit i =
+/// ExpressionCategory i (0..9; 0x3ff all), whatever the clip or source (Studio gives every character the component).
+#[no_mangle]
+pub unsafe extern "C" fn ok_session_set_expression_mask(s: *mut OkSession, mask: u32) -> i32 {
+    let Some(s) = sess_ref(s) else { return -1; };
+    if mask > crate::pose::EXPRESSION_ALL as u32 { return -1; }
+    s.expression_mask = Some(mask as u16);
     0
 }
 /// EyeLookCalc.LoadAngle for a source NO_LOOK pattern; validate before publishing runtime state.

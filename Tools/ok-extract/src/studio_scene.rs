@@ -102,6 +102,8 @@ pub enum Object {
         /// VoiceCtrl: the voice list (group, category, no of the Studio voice sheets) and its repeat (0 none, 1 all, 2 the
         /// selected one).
         voices: Vec<[i32; 3]>, voice_repeat: i32,
+        /// OICharInfo.expression: ExpressionBone (joint correction) categories 0..7 left / right arm, leg, forearm, thigh.
+        expression: Vec<bool>,
         /// Children attached to accessory slots (slot, objects).
         children: Vec<(i32, Vec<Object>)>,
     },
@@ -586,7 +588,9 @@ fn object(r: &mut Reader, v: &Version, kind: i32, depth: usize) -> Result<Object
             let enable_fk = r.bool()?;
             let mut active_fk = [false; 7];
             for a in &mut active_fk { *a = r.bool()?; }
-            for _ in 0..if v.at_least("0.0.9") { 8 } else { 4 } { r.bool()?; }
+            // OICharInfo.expression: ExpressionBone categories 0..7 (arms, legs, forearms, thighs; 4 before 0.0.9).
+            let mut expression = Vec::new();
+            for _ in 0..if v.at_least("0.0.9") { 8 } else { 4 } { expression.push(r.bool()?); }
             let anime_speed = r.f32()?;
             let anime_pattern = r.f32()?;
             r.bool()?; // option visible
@@ -604,7 +608,7 @@ fn object(r: &mut Reader, v: &Version, kind: i32, depth: usize) -> Result<Object
             let eyes = read_eyes(r.take(eyes_len)?, v)?;
             let anime_time = r.f32()?;
             for _ in 0..2 { let n = r.count("access")?; r.take(n * 8)?; }
-            Ok(Object::Character { key, change, visible, sex, card_offset, card_len, face_png_offset, face_png_len, ext_offset, ext_len, fk, ik, enable_fk, active_fk, enable_ik, active_ik, neck, eyes, anime, anime_speed, anime_time, hand, mouth_open, anime_pattern, anime_options, anime_force_loop, nipple, siru, voices, voice_repeat, children: kids })
+            Ok(Object::Character { key, change, visible, sex, card_offset, card_len, face_png_offset, face_png_len, ext_offset, ext_len, fk, ik, enable_fk, active_fk, enable_ik, active_ik, neck, eyes, anime, anime_speed, anime_time, hand, mouth_open, anime_pattern, anime_options, anime_force_loop, nipple, siru, voices, voice_repeat, expression, children: kids })
         }
         1 => {
             let (key, change, visible) = base(r, true)?;
@@ -950,6 +954,27 @@ mod tests {
                         super::Object::Item { children, .. } | super::Object::Folder { children, .. } | super::Object::Route { children, .. } => voiced(children, out),
                         _ => {}
                     }
+                }
+            }
+            fn corrections(objects: &[super::Object], out: &mut Vec<String>) {
+                for o in objects {
+                    match o {
+                        super::Object::Character { expression, children, .. } => {
+                            out.push(expression.iter().map(|b| if *b { '1' } else { '0' }).collect());
+                            for (_, c) in children { corrections(c, out); }
+                        }
+                        super::Object::Item { children, .. } | super::Object::Folder { children, .. } | super::Object::Route { children, .. } => corrections(children, out),
+                        _ => {}
+                    }
+                }
+            }
+            if let Ok(s) = super::read(&bytes) {
+                let mut c = Vec::new();
+                corrections(&s.objects, &mut c);
+                for flags in c {
+                    let e = used.entry(format!("(joint correction {flags})")).or_default();
+                    e.0 += 1;
+                    if e.1.is_empty() { e.1 = f.display().to_string(); }
                 }
             }
             if let Ok(s) = super::read(&bytes) {

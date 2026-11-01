@@ -3,6 +3,7 @@
 #include "HAL/FileManager.h"
 #include "Misc/Paths.h"
 #include "OKStudioCatalog.h"
+#include "OKStudioSettings.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
@@ -34,10 +35,16 @@ FString FOKStudioPose::Directory()
 
 TArray<FString> FOKStudioPose::Files()
 {
-	TArray<FString> Names;
-	IFileManager::Get().FindFiles(Names, *(Directory() / TEXT("*.dat")), true, false);
+	// UserData/Studio/pose and the pose folders added in the settings (资源目录).
+	TArray<FString> Folders = { Directory() };
+	for (const FString& R : FOKStudioSettings::Get().PoseRoots) Folders.AddUnique(R);
 	TArray<FString> Out;
-	for (const FString& N : Names) Out.Add(Directory() / N);
+	for (const FString& Dir : Folders)
+	{
+		TArray<FString> Names;
+		IFileManager::Get().FindFiles(Names, *(Dir / TEXT("*.dat")), true, false);
+		for (const FString& N : Names) Out.AddUnique(Dir / N);
+	}
 	Out.Sort([](const FString& A, const FString& B) { return IFileManager::Get().GetTimeStamp(*A) > IFileManager::Get().GetTimeStamp(*B); });
 	return Out;
 }

@@ -547,7 +547,7 @@ Undo：姿勢拖動仍走整份快照（現有機制已能還原 FK／IK），�
   - 10-30 整合後：70b762429 已在 F 的 HEAD。但 `C002.png` 的 `okId`（原作卡 sha256 `663284207c…`）在 F 這台的遊戲 `UserData`、`Content/CharacterCards`、`Saved` 都找不到相符的原作卡，無法用新版重轉。需要原作卡的人（轉出這批 CrowdAPNG 的 checkout）重轉後放回本機。
 
 **沒做到或做法不同的地方**
-- 遠面：Unreal 的透視投影沒有遠面，`Far` 只存檔，不影響畫面。近面有效（`UOKStudioViewCamera`）。
+- 遠面：Unreal 的透視投影沒有遠面，`Far` 原本只存檔、不影響畫面。2026-11-01 補上：OKStudio 外掛自己註冊一個 SceneViewExtension（`OKStudioGame.cpp` 的 `FOKStudioFarPlaneExtension`，只在工作室用場景相機、`Far` > 0 時啟用，工作室停止就清掉；不改 Config、不換共用的 LocalPlayer，C／E 不受影響），在 `SetupView` 把原點等於工作室視角的視圖（畫面、截圖、`capture`；鏡子與螢幕道具的 capture 看出去的點不同，不套）的無限遠反向 Z 透視投影換成有遠面的版本（`FReversedZPerspectiveMatrix` 的 MinZ／MaxZ），遠面外逐像素裁掉。實測 `83283571_p1` 相機 310：遠面 10 m 只剩前景，25 m 裁掉後牆與天空，設回 0 恢復（`C:\Users\Damody\AppData\Local\Temp\claude\C--portable-OpenKoikatsu\06cb08af-708c-4559-954f-993ce591a332\scratchpad\far_c2500.png`）。正交照舊用 `OrthoFarClipPlane`。屬性列標籤改成「遠面 cm（0 無）」。`verify_ok_studio.lua --tag far_1101` 6/6。近面有效（`UOKStudioViewCamera`）。
 - 地圖縮圖：KK Studio 的地圖清單（`abdata/studio/info` 的 `Map` 表）本身就沒有縮圖欄位，原作也只列名稱；維持只列名稱。
 - 表情與手型名稱：U11 從遊戲資料補上眼型與手型名稱；眉型、嘴型遊戲資料沒有名稱，維持編號。
 - U6-8：讀卡畫面「動作時間軸」改成開 OK Studio 並打開時間軸。舊 UMG 工作室已在 U11 移除（2026-10-30）。
@@ -747,8 +747,17 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
 | U27 場景比對剩餘 | `83572034_p1` 中央的玻璃房間不見、兩側螢幕內容不同；`83283571_p1` 原生整體偏粉紅（AmplifyColor LUT 或雲層零件）；光束道具ビーム・扇本身的放射光 | 玻璃房間是原生截圖工具的假差異；偏粉紅已修（cube atlas 面上下顛倒）；齒輪的放射光是 SunShafts，queue > 2500 的零件不在原生深度貼圖裡、要當光源，已修（下方記錄）；舞台前地板偏亮未查 |
 | U28 效能與小視窗 | `run_ok_studio_perf.lua` 只開一個 Unreal 時量；1280×720 視窗下逐窗檢查不出框 | 小視窗**已做**（下方記錄）；效能未量（等全機只剩一個 Unreal） |
 | U29 音效選單 | 左上「音效」主選單（第 3.1 節規格）只是空殼：Studio 背景音樂（BGMCtrl）與外部音源（OutsideSoundCtrl）的播放、循環、隨場景存讀，KStudio 場景帶進來 | **已做**（下方記錄）；KKS 的 Studio 沒有環境音清單（ENVCtrl 只讀過不用）；KKPE 外掛資料見記錄 |
-| U30 角色語音 | 角色選單的「語音」（第 3.8 節 `hs2/55_voice.png`）：性格→分類→語音三欄，加入角色的播放清單；清單的播放、停止、循環方式、移除、上移／下移、清空；角色說話時嘴型跟著動；KStudio 場景的 voiceCtrl 帶進來 | **已做**（下方記錄）；語音檔 1.9 GB 未進版控（等協調者決定） |
-| U31 燈光細項 | 第 3.5 節：燈光作用對象（全部／角色／地圖）、內外錐角、陰影軟硬 | **已做**（下方記錄）；關節補正（KStudio 角色的 expression 旗標）要先查原作 Expression 類別才能對應，未排 |
+| U30 角色語音 | 角色選單的「語音」（第 3.8 節 `hs2/55_voice.png`）：性格→分類→語音三欄，加入角色的播放清單；清單的播放、停止、循環方式、移除、上移／下移、清空；角色說話時嘴型跟著動；KStudio 場景的 voiceCtrl 帶進來 | **已做**（下方記錄）；語音檔 1.9 GB 進 LFS，分三個提交（81159b7de、f13019417、4fb0b298c，各約 650 MB） |
+| U31 燈光細項 | 第 3.5 節：燈光作用對象（全部／角色／地圖）、內外錐角、陰影軟硬 | **已做**（下方記錄）；關節補正改由 U32 做 |
+| U32 關節補正 | 角色的關節補正（Studio `OICharInfo.expression`、`MPCharCtrl` 的 JointInfo）：查原作 ExpressionBone 的類別，對應 KStudio 存檔旗標，八個開關、存讀、匯入 | **已做**（下方記錄） |
+
+**U32 關節補正記錄（2026-11-01）**：
+
+- 原作：`ExpressionBone.EnableCategory` 有 10 類，0 左臂（ShoulderL、UpperarmL、ElboL、HandL）、1 右臂、2 左腿（LegL、KneeL、CalfL）、3 右腿、4 左前臂（ForearmL）、5 右前臂、6 左大腿（ThighL）、7 右大腿、8 胸（Bust、BustColDB）、9 飾品掛點（AcsNull）。Studio 的 `OICharInfo.expression` 是 8 個 bool（0.0.9 以前 4 個），預設全關；`AddObjectFemale／Male` 只對 0～7 呼叫 `EnableExpressionCategory`，胸與飾品掛點一直開著。
+- Rust：`pose::apply_expression_bone_masked(skel, mask)`，各分支照上面對應類別（ForearmL 寫 `cf_d_hand` 位置與 `cf_d_wrist`、HandL 寫 `cf_d_forearm02`；大腿扭轉是 6／7，膝與小腿是 2／3）。session 多 `expression_mask: Option<u16>`，C ABI `ok_session_set_expression_mask`（`FOkSession::SetExpressionMask`）。設定後不論動畫來源每幀都跑（原生 Studio 每個角色都有這個元件）；沒設定的路徑（Gallery、街區）照舊規則。原本 OK 卡的 session 沒有 game_root，ExpressionBone 從來沒在 OK Studio 跑過（見 ERROR_LOG）。測試 `expression_mask_runs_only_its_categories`。
+- 場景：`FOKSceneCharacter::JointCorrection`（位元 0～7），預設 0 = Studio 預設全關；舊 `.okscene` 沒有欄位也是 0，與以前顯示一致。場景物件把 `(JointCorrection & 0xff) | 0x300` 送進角色 session。KStudio 匯入讀 `expression` 陣列。FK 頁加「關節補正」一列：左臂、右臂、左腿、右腿、左前臂、右前臂、左大腿、右大腿、全部。控制通道 `bones` 回報 `joint_correction`，`patch` 用 `{"Character": {"JointCorrection": n}}`。
+- 統計：本機 7,652 個場景的角色旗標 `00000000` 26,145 個、`11111111` 12,152 個，其餘混合（`11001100` 1,233 個等）；14 個基礎庫樣本中 `koikatu_cs0000010` 同時有 0、3（`11000000`）、255。
+- 驗證：0010 匯入後六個角色各自的旗標正確；角色定格（Speed 0）後全開與全關的截圖平均差 1.88（同設定兩張 0.023），差異在手臂與腿的關節輪廓，沒有撕裂；FK 頁按鈕、存讀（0x55）一致；`ok_studio_ui_fit.lua`（1280×720）0 項、`check_ok_studio_buttons.lua` 97/97、`verify_ok_studio.lua` 全 PASS；`cargo check --release` 與 `--no-default-features`、遊戲 `OpenKoikatsu` 與編輯器 Development 連結成功。
 
 **U31 燈光細項記錄（2026-11-01）**：
 
@@ -758,15 +767,16 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
 
 **U30 角色語音記錄（2026-11-01）**：
 
-- 轉換：`ok-extract <遊戲> --oklib studio-voices <base_v1>` 讀 Studio 的 VoiceGroup（40 個性格）、VoiceCategory（`VoiceCategory_<x>_<性格>`）、`Voice_<性格>_<分類>_<n>` 表（編號、性格、分類、台詞、bundle、clip），寫 `studio_voices.json`（另存一檔，8,280 句放進 studio_items.json 太長），clip 寫成 `base_v1/studio/voice/<clip>.ogg`。40 個 `sound/data/pcm/cXX/h/01.unity3d`（共 6.6 GB）每個只載一次、8 執行緒約 5 分鐘；BGM 也改用同一個「一個 bundle 取多個 clip」的函式。寫出 8,020 句、1.94 GB；260 句和 `kks_bgm_14` 一樣是 fsbex 的 `failed to encode Vorbis stream`，清單裡顯示灰色。
+- 轉換：`ok-extract <遊戲> --oklib studio-voices <base_v1>` 讀 Studio 的 VoiceGroup（40 個性格）、VoiceCategory（`VoiceCategory_<x>_<性格>`）、`Voice_<性格>_<分類>_<n>` 表（編號、性格、分類、台詞、bundle、clip），寫 `studio_voices.json`（另存一檔，8,280 句放進 studio_items.json 太長），clip 寫成 `base_v1/studio/voice/<clip>.ogg`。40 個 `sound/data/pcm/cXX/h/01.unity3d`（共 6.6 GB）每個只載一次、8 執行緒約 5 分鐘；BGM 也改用同一個「一個 bundle 取多個 clip」的函式。寫出 8,020 句、1.94 GB；另外 260 句和 `kks_bgm_14` 一樣是 fsbex 的 `failed to encode Vorbis stream`。原因（錯誤改印 Debug 後看到 `ReadPacket … Incomplete(Size(1))`）：這些串流結尾只剩 1 個對齊位元組，沒有 0／0xFFFF 結束標記，fsbex 還要再讀 2 位元組的封包長度而整首放棄（音訊其實已解完）。fsbex 改用 `Tools/vendor/fsbex`（`[patch.crates-io]`），剩不到 2 位元組就當結束；補轉後 8,280 句全部轉出（2.0 GB）。fsbex 是先解碼再以 quality 1.0 重新編碼，所以 ogg 比原始資料大。
 - 場景：角色多存 `Voices`（性格、分類、編號）、`VoiceRepeat`（0 播完停止、1 全部循環、2 單句循環，Studio 的 None／All／Select）、`bVoicePlay`、`VoiceStart`（從清單第幾句開始）。播放用角色自己的 `PlaySpeechPcm`（嘴型跟著音量動）；解碼在背景執行緒；不在基礎庫的句子跳過；匯出影片與靜音時不出聲；改清單不重建角色。
+- 建置（2026-11-01 修正，`6ef532add`）：`fsbex` 自帶一份 libvorbis，放進 `ok_extract.lib` 會和 UE 的 libvorbis 重複定義、遊戲執行檔連結失敗；`studio-sounds` 改成 cargo feature，CLI 預設帶著，`build-release.cmd` 建 Unreal 用的靜態庫時加 `--no-default-features` 不帶它。
 - KStudio 匯入：OCIChar 的 voiceCtrl（清單每項三個 int、之後一個 repeat）原本讀過就丟，現在帶進來，有清單的角色開場就說。本機 7,652 個場景有 1,059 個角色帶語音（repeat 0：68、1：944、2：47）。
 - 語音窗（角色選單「語音」，浮窗 `voice`）：左邊性格、分類、語音三欄（點語音加到所選角色清單；沒轉出的灰色），右邊清單（說到的那句前面標 ▶）、播放（從選中那句開始）、停止、循環方式（點一下輪換）、移除、上移、下移、清空。長台詞以省略號截斷，完整台詞在提示。
 - 控制通道：`state` 的角色物件多 `voices`（句數）、`voice_play`、`voice_repeat`、`voice_playing`（正在說第幾句，-1 沒有）；清單用 `patch` 改（`{"Character": {"Voices": [...], "bVoicePlay": true}}`）。驗證：`koikatu_cs0000157` 匯入後角色開口、窗內停止／播放／循環／清空、點語音加入清單、兩句清單 repeat 0 依序說完後停、存讀一致；`ok_studio_ui_fit.lua` 加入 `voice`，1280×720 為 0 項。
 
 **U29 音效記錄（2026-11-01）**：
 
-- 轉換：`ok-extract <遊戲> --oklib studio-sounds <base_v1>` 讀 `abdata/studio/info/` 的 BGM 表（51 首：KK 的 `bgm_00`～`27`、KKS 追加的 `kks_bgm_*`、`kks_song_00` 等；編號、名稱、bundle、clip 名），把 AudioClip 的 `.resource`（FSB5）用 `fsbex` 取出 Vorbis 寫成 `base_v1/studio/bgm/<clip>.ogg`（50 檔、296 MB，LFS），`studio_items.json` 多記 `bgm`。`kks_bgm_14` 的 Vorbis 標頭 fsbex 重建不出來（`failed to encode Vorbis stream`），清單裡顯示灰色。
+- 轉換：`ok-extract <遊戲> --oklib studio-sounds <base_v1>` 讀 `abdata/studio/info/` 的 BGM 表（51 首：KK 的 `bgm_00`～`27`、KKS 追加的 `kks_bgm_*`、`kks_song_00` 等；編號、名稱、bundle、clip 名），把 AudioClip 的 `.resource`（FSB5）用 `fsbex` 取出 Vorbis 寫成 `base_v1/studio/bgm/<clip>.ogg`（50 檔、296 MB，LFS），`studio_items.json` 多記 `bgm`。`kks_bgm_14` 原本轉不出來（`failed to encode Vorbis stream`），已修（見 U30 記錄的 fsbex 修補），51 首全部轉出。
 - 場景：`.okscene` 多存 `sound`（`Bgm`、`bBgmPlay`、`bBgmRepeat`、`Outside`、`bOutsidePlay`、`bOutsideRepeat`）。音效選單兩個浮窗：背景音樂（清單、播放／停止、循環；沒轉換的灰色）、外部音源（專案 `UserData/audio` 的 ogg／wav 加上場景自己的檔）。解碼在背景執行緒，播完依循環重播或停住；匯出影片與靜音時不出聲。
 - KStudio 匯入：SceneInfo 依序存 BGMCtrl（`repeat`、`no`、`play`，repeat 在前）、ENVCtrl（同格式）、OutsideSoundCtrl（`repeat`、檔名、`play`）。本機 7,652 個場景的 repeat 全是 1（全部循環），編號 0～29（清單是 0～29 與 50～70，沒轉出來的列進讀取報告）；外部音源檔從遊戲 `UserData/audio` 或場景旁邊複製進場景的卡片夾，找不到列進報告。
 - 控制通道：`state.sound` 回報設定、檔案與是否正在播；`scene` 的 `{"sound": {...}}` 改設定。驗證：BGM 播放、換曲、停止、窗內按鈕、存讀、`koikatu_cs0000383`（BGM 1 自動播放）匯入、外部音源 ogg 播放；`ok_studio_ui_fit.lua` 加入兩個新浮窗，1280×720 為 0 項。
@@ -812,7 +822,28 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
   - 其他場景重比（2026-11-01）：4432 稻田與 `1547730231799` 沙灘（都有 `mo_stneo_zimen_00` 的 heat_distortion 層），原生探針 `Saved/Tests/kks_heat_1101` 對 UE 的 Gamma 版與線性版：兩版逐像素相同（平均差 0、最大差 4/765），因為這兩張的貼圖 alpha 是 1，兩種公式此時相等；與原生的區域平均差都在 10 以內（稻田 46,57,65 對 43,56,63；沙灘 240,224,177 對 238,219,167）。沒有變差，保留 Gamma 版。
   - 結論：原生前景的暗青（23,80,99）是水在那裡不透明；我們的水在前景幾乎透明（隱藏水面前後只差 3～7）。水面石地的實際深度差、水材質數值（探針只錄到 `_Glossiness`、`_Cutoff`）都還沒對過，下一步要讓探針錄出水材質全部數值與真正的 `_CameraDepthTexture`（目前錄到的 `depth.r32f` 看起來是顏色，含天空雲層，不能當深度用）。
   - 台前光芒仍是 93～98（原生 74～79）；隨機暗煙會讓平台與地板在 120～150 之間跳動，單張截圖不能當結論。
+- **海面前景：原因是 Standard 道具被畫成卡通道具（2026-11-01，F 組）**：
+  - 探針加了兩項：`--material-props <shader 名稱片段|…|all>` 錄出材質的每個屬性（`prop` 列，含 render queue），深度改在渲染後取全域 `_CameraDepthTexture`（`Scene1.depth-global.r32f`，Unity 的 `Depth` 格式、反向 Z；舊的 `depth.r32f` 用名稱 Blit 拿到的是顏色，不能用）；`--depth-hide` 藏掉指定 renderer 兩幀再錄一次深度，`--hide-file` 從 UTF-8 檔讀 `--hide` 清單（路徑有韓文時）。拍在 `F:\OpenKoikatsu\Saved\Tests\kks_water_1101*`、`kks_water_hide*`、`kks_water_hw2`、`kks_water_hs2`。
+  - 水材質（`water_square`，StylizedWater/Desktop）：queue 2500、`_Transparency` 0.35、`_Depth` 15、`_Depthdarkness` 0.15、`_RimSize` 1、`_Rimfalloff` 0.5、`_WaterColor` (0, 0.5035, 1, 0.503)、`_RimColor` (0.75, 0.75, 0.5, 0.25)、`_FresnelColor` (0.547, 0.8655, 1, 0.272)、`_Fresnelexponent` 3、`_Glossiness` 0.5、`_RefractionAmount` 0.055，和我們讀到的一樣。這個水本身會寫進原生的深度貼圖（藏掉它，前景的深度才變成底下的地面或遠平面），所以原生水 shader 讀到的「水後深度差」恆為 0。
+  - 逐層藏（後處理全關）：原生前景下 83,116,125，藏水 90,119,123、藏 heat 層 98,122,125；水和 heat 層的影響都小。原生最終畫面的暗青（24,81,100）主要是 AmplifyColor 的 LUT（拿掉它變 79,110,118；這張沒有深度遮罩、沒有 volume）。真正的差別在底下：四層水和海水方塊都藏掉後，前景地面原生 121,118,108、我們 219,213,190。
+  - 那塊地面是 mod 道具 307「norimen b1r」（材質 `Conc0244`：Unity Standard、`_Color` 0.8、`_Metallic` 0.435，layer 10）。OK Studio 的道具一律用遊戲的道具程式（卡通明暗）畫，Standard 的 `_Color`、`_Metallic` 與受光角度都沒有用到。修法：整個由 Standard 組成的道具改走地圖材質已有的 Standard 路徑（`SpawnPreview` 的 map 參數：自己的材質圖、`_Metallic`／`_Color`、探針環境光與反射），照明通道仍是道具的（Studio 角色燈）。
+  - 結果（最終畫面）：前景下 原生 24,80,100／修前 90,128,130／修後 43,94,109；海面左 17,69,94／45,97,124／23,78,106；海面右 20,74,96／54,104,121／23,84,110；藏掉水與海水方塊後的地面 121,118,108／219,213,190／125,109,102。左側建築也跟著變暗，和原生一致。對照圖 `C:\Users\Damody\AppData\Local\Temp\claude\C--portable-OpenKoikatsu\06cb08af-708c-4559-954f-993ce591a332\scratchpad\w_cmp1.png`（左原生、右修後）。沙灘 `1547730231799` 與稻田樣本目視沒有變差，`verify_ok_studio.lua` 全 PASS。
+  - 剩下：舞台下方那一條（前景中）原生 99,126,130、我們 61,113,129；台前光芒仍比原生強（我們 144～161，原生 115～138，煙會動）。
 - **台前光芒與海面（2026-11-01）**：暗煙 alpha 調成 0.6 後（兩次各 40 秒拍）板面 126／128（原生 106／137）、地板 135／126（87／120）、台前光芒 90／93（74／79）、齒輪 136／134、窗戶 149。台前光芒關掉光束是 79，和原生一樣，多出的是光束：原生台前板面被煙壓得更暗，光源較弱。海面兩側（左右各 280 px）我們不論有沒有光束、煙都在 96～116，原生 63，是 StylizedWater 本身偏亮，與這次無關，**另查**。
+- **台前光芒：深度替身改成「原生深度貼圖有的東西」（2026-11-01，F 組）**：
+  - 以前光束與水把「不在原生深度貼圖的零件」（queue > 2500，stencil 255）當成無限遠。原生不是這樣：SunShafts 在這些零件上看到的是貼圖裡它們**後面**的東西；台前那塊板（queue 3000）後面是水（約 23 m），不遠，所以原生板子不是光源（原生光束在台前只加 +1）。我們把板子當遠處，台前多出光芒。
+  - 改成反過來：`AKKPreviewActor::DepthTexturePresentParts` 記下原生深度貼圖會有的零件（不透明、queue ≤ 2500，再加 StylizedWater：它 queue 2500、有 shadow caster，探針證實它在貼圖裡），地圖零件也算；場景有光束或讀深度的水時 `AOKSceneActor::MarkDepthTexture` 讓它們畫進 custom depth（stencil 0）。光束與水把 custom depth 當作 Unity 的深度貼圖讀；水因此讀到自己的深度（和原生一樣，depthDiff 0）。
+  - 材質沒存 queue（-1）時 Unity 用 shader 自己的 queue：`unity::shader_pass_state` 多讀 SubShader 的 `Queue` 標籤，材質多一個 `_OKShaderQueue`；`shader_states.json` 升到第 4 版也記 queue（舊目錄會在背景自動重讀，約 4 分鐘）。`main_item_studio` 本身是 2450（AlphaTest），齒輪、牆這些基本形是材質自己存了 3000。
+  - 半透明但寫深度的零件（窗戶玻璃 `main_item_studio_alpha`，queue 4907）為了繪製順序也畫進 custom depth（stencil＝排名），蓋掉了替身：窗外的天空被當成近處。光束在 stencil ≠ 0 的地方改讀場景深度（UE 的半透明不寫場景深度，那裡是玻璃後面的東西）。窗框在玻璃後面所以仍算近處，與原生略有差。
+  - 診斷：`OK_STUDIO_SHAFTS_DEPTH=show` 把光束讀到的深度畫出來（紅＝遠，綠隨距離到 50 m）。探針 `--material-props` 多錄 `(passes)`：pass 名稱、RenderType、shadowCastingMode。
+  - 結果（`83283571_p1`，1280×720，藏掉全部特效後光束開／關）：台前光芒 192／191，光束只加 +1，與原生（138／137）一致；光束差圖的形狀（整面牆與窗外都是光源，齒輪往外拉）與原生相同（`C:\Users\Damody\AppData\Local\Temp\claude\C--portable-OpenKoikatsu\06cb08af-708c-4559-954f-993ce591a332\scratchpad\fx4_cmp.png`，左原生、右我們）。特效開著時台前在 139～169 之間跳（煙與火焰粒子），原生一張是 138。`verify_ok_studio.lua --tag shafts_1101b` 6/6。
+- **舞台下方那一條（2026-11-01，F 組，未修，分析）**：
+  - 原生分層：藏水（`kks_water_hidew`）、藏 heat（`kks_water_hideh`）那一條都不變（104,129,132），所以它不是水，是台前板子（queue 3000）伸到水面下的部分：原生水 queue 2500、不寫深度，板子在水之後才畫，水面下的板子完全蓋過水。我們的 UE 半透明水一律畫在不透明板子之上，把它染成深青（我們 46～69,106～124,125～139）。
+  - 試過的做法：水在「看到的不透明面比深度替身近」（＝原生較晚畫的零件）的地方 `clip`。要做到這點水本身不能在 custom depth 裡；但水一離開 custom depth，整片海就變成深藍（8,31,57；原生 24,80,100），且與 depthDiff 用 0、0.3、1.5 m 或讀 custom depth 都無關；水留在 custom depth 時海面正確（30,92,108）。另外 `clip` 寫在水的程式裡，custom depth 那一趟也會執行（場景貼圖讀不到），把水自己的 custom depth 寫入也砍掉。原因牽涉半透明排序的深度測試（海的立方體、heat 層的 rank 與水在 custom depth 的位置），還沒理清，全部還原。
+  - 診斷 `OK_STUDIO_SHAFTS_DEPTH=show` 改成綠色一律顯示 custom depth、藍色標出半透明零件（排序用 rank）寫入的地方。下一步：先逐一藏海的立方體（179）、heat 層（180～182），在水離開 custom depth 的版本找出是誰被排序測試丟掉，再決定板子的做法（例如只把和水相交、queue 比水高的不透明零件改到水之後畫）。
+  - **更正與結論（同日，協調者限時一輪）**：照 Unity queue 讓 queue 比水高、和水相交的不透明零件（台前板子）在水之後重畫（半透明複本只輸出 opaque pass 留下的 SceneColor，依自己的 queue 排在水（改成原生的 2500）之後）。結果那一條幾乎不變（前景中 47,107,124；藏特效 74,127,139）。再逐層藏才看清：我們藏掉水那一條仍是青色（45～55,106～113），藏掉海的立方體（179）與 heat 層（180～182）才變回淺色（151,132,129）；原生藏 heat 不變（103,128,132）。所以染色的主要是 heat 層與海的立方體，不是水，上面「水把板子染暗」的判斷錯了。程式已全部還原，**記為已知差異**。之後要修應先比對原生 heat_distortion（原作是 GrabPass 扭曲、不著色）與海立方體在那裡的樣子。
+  - **補註（同日稍後）**：原生的 `kks_water_hidew`／`kks_water_hideh`／`kks_water_hideall` 三張在前景下、海面、前景中幾乎一樣（前景下都是 24,80,100，前景中 103～106,128～130,132～133），只有煙會動的台前不同；後處理全開時藏層的差別可能被 AmplifyColor 的 LUT 壓掉，也可能藏層沒生效。所以「原生藏 heat 不變」不能當證據，heat 層（Studio 的海，`Xffect/heat_distortion`，我們照 DXBC 畫成乘上 `lerp(1, _MainTex.rgb, _MainTex.a)`）在原生的實際影響要在後處理全關下重拍才知道。
+- **月盤暗面重拍確認（2026-11-01，F 組）**：`83572034_p1` 重拍（`C:\Users\Damody\AppData\Local\Temp\claude\C--portable-OpenKoikatsu\06cb08af-708c-4559-954f-993ce591a332\scratchpad\moon_now.png`）：月盤內 (640,90) 我們 (0,1,7)、原生 (0,0,3)；(620,100) (0,1,7)／(0,0,3)；月牙 (800,120) (66,149,229)／(67,152,230)。U27 的 AlphaToMask 修正之後沒有退步，上面「待做」裡的月盤暗面、火焰粒子（U26）、Funly 天空盒（更正：其實是 Skybox4，已修）都已處理。
 
 **實際做一個完整場景（2026-10-31，F 組）**：全程用畫面上的按鈕（控制通道 `click`，按鈕自己的處理函式）做：地圖 0 自室 → 加女角 C001 → 女 H 挿入／騎乗位／弱ループ、動作模式 1 → 加男角 Male01 → 道具ハート1 → 特效閃亮光粉 → 相機 → 另存 → 新場景 → 開啟讀回。讀回後地圖、兩個角色（位置、動作、`pattern`）、道具、特效、相機都一致，讀取報告沒有缺件。過程中卡手或不直覺、已修掉的：
 
@@ -886,6 +917,154 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
 - `check_ok_studio_buttons.lua` 97/97。系統選單那一項原本假設選單是關的，流程結束時選單開著，第一次跑成 96/97；改成沒開才打開。
 - `OKStudio.UiSelfTest` 46/46，在新程序跑。在用過的實例裡跑時，「畫面點角色」會因視角不同失敗；接著 Undo 多退一步，第 123 行取到空指標崩潰，已加上防護。
 - `verify_ok_studio.lua --tag scene2c_1101` 6/6。GameSelfTest 曾因播放頭只在存檔時寫入而失敗（存檔前的預期內容沒有它），改成播放頭一變就同步到文件。
+
+### U33～U42　對照 HS2Studio6 的第四批（2026-11-01，F 組）
+
+協調者要求重新對照 `Saved/StudioUIRef/hs2/` 與我們的 UI。逐面板看參考截圖、`OK_STUDIO_HS2_LAYOUT_SPEC.md`，再用 grep 確認程式裡真的沒有；第 9 節不做的（Studio 內換裝捏人、角色 MaterialEditor、語音佇列、聊天）不列。依擺姿勢、擺場景時碰到的頻率排序。
+
+| 階段 | 內容 | 目前缺的 |
+|---|---|---|
+| U33 IK 目標轉方向 | 手、腳的 IK 目標可旋轉（`61_bones_ik.png`）：選到手腳 IK 點時把手可切旋轉，IK 頁加旋轉 XYZ 與「用旋轉」開關 | 把手在 IK 時固定為移動（`OKStudioGame.cpp` 的 `F.bIk ? 0`）；`bUseRotation`／`Euler` 只有 KStudio 匯入會設 |
+| U34 自由視角鏡頭設定 | 「当前视口镜头」（`19_camera.png`、`L_53_camera.png`）：自由視角也能調視野角度、透視／正交、正交大小、近／遠面；HDR、MSAA 開關 | 自由視角 FOV 寫死 40；近面、正交、遠面只在用場景相機時套用 |
+| U35 FK／IK 部位操作 | FK 整體開關、各部位「初始化」（從目前動作取值）；IK 各部位「复位」 | FK 沒有「全部」開關、只能整個角色「FK←姿勢」；IK 只有「全部」與「清除 IK」 |
+| U36 IK 權重 | 整體權重；目前目標的位置權重、旋轉權重分開；上一個／下一個目標；「复位整体与当前目标权重」（`67_bones_weight.png`） | 每個目標只有一個 `Weight` |
+| U37 頁內把手大小 | FK／IK 頁底部「操作轴」「控制点」大小滑桿 | 只有設定窗的 Gizmo 大小，骨點大小不能調 |
+| U38 角色資源檢查 | 逐角色列出缺的 mod 部件與 shader 異常；「补齐后重试」重讀角色（`13_resource_check.png`） | 只檢查卡片檔在不在，重新檢查不重讀角色 |
+| U39 材質編輯器補完 | 貼圖槽加載／清空／重置／匯出與縮放偏移；Renderer 顯示與陰影；換 shader、Render Queue；複製／貼上改動、全部重置；匯出 UV、OBJ、全部貼圖（`20_material_editor.png`） | 貼圖、renderer、shader 編輯只能由 KStudio 匯入產生，UI 只能刪除；沒有複製貼上與匯出 |
+| U40 場景卡資料夾 | 「包含子文件夹」、「选择文件夹…」（`21_scene_card_choice.png`） | 三個固定根目錄，不遞迴 |
+| U41 角色載入器 | 女／男篩選、「添加默认角色」（`02_hs_loader.png`） | 只有資料夾、搜尋、分頁、加入、替換 |
+| U42 遊戲設定 | 主音量、背景時繼續執行、垂直同步、幀率上限（`14_settings.png`） | 設定窗沒有這些 |
+
+待確認（HS2 截圖裡看不到或可能已涵蓋）：道具動畫速度／模式／時間與 `LightCancel` 的 UI、快搜「刷新目录」、地圖窗「设置」、FK／IK 頁「动画位置姿态」。
+
+#### U33 完成紀錄
+
+- IK 頁選到左右手、左右腳時多一個「用旋轉（把手按 E 轉方向）」。打開時從手／腳骨目前的方向取 Euler（`IkEffectorEuler`，角色的 Unity 空間、ZXY 順序），所以不會跳；打開後有「轉 X／Y／Z」與「取目前方向」。
+- 手腳 IK 點且已開旋轉時，把手照目前的移動／旋轉模式（W／E）切換；旋轉時世界軸換成角色本地、再換成 Unity 軸，增量乘到目標上，讀數顯示「IK 旋轉」。其他 IK 點仍只能移動。
+- 驗證（83283571_p1，FK 先把左上臂、前臂彎起來）：開 IK 後手骨局部角 ≈0；開「用旋轉」後目標 Euler 取到 (52.5, 112.9, 7.1)，手骨局部角仍 ≈0（沒跳）；X 加 60 後手骨局部角變成 (5.8, -23.6, -25.9)。遊戲與編輯器都連結成功，`verify_ok_studio --tag u33_1101` 6/6。
+- 沒用畫面拖曳實測旋轉把手（控制通道沒有拖曳操作）；拖曳走的是和骨骼旋轉相同的增量路徑。
+
+#### U34 完成紀錄
+
+- 場景文件新欄位 `FreeView`（`FOKSceneCamera`：視野角度、近面、遠面、正交、正交寬度），隨場景存讀，新場景時重設。自由視角套用它；用場景相機時照舊套那台相機的。
+- 相機頁在自由視角時多「自由視角鏡頭」一組：視野角度、近面、遠面（0 無）、正交、正交寬度、鏡頭重設。場景相機那組補上遠面。
+- 自由視角正交時，滾輪縮放改的是正交寬度（只改距離畫面不會變）；「聚焦所選」依目前視野角度算距離，正交時一併設寬度。「從視角建相機」在自由視角時帶走整組鏡頭設定。
+- 控制通道 `state` 回 `free_view`，`scene` 可帶 `free_view` 改它（AI 與測試用）。
+- 不做：HDR、MSAA 開關。Unreal 一律 HDR 繪製，MSAA 只在 forward renderer 有，延遲繪製下沒有對應設定。
+- 驗證（83283571_p1，實際視窗截圖）：視野 40→20 畫面拉近；正交寬度 800 變平行投影；遠面 450 cm 時距離 5 m 的角色被切掉；重設後回原樣。遊戲與編輯器都連結成功，`verify_ok_studio --tag u34_1101` 6/6。
+
+#### U35 完成紀錄
+
+- FK 頁：部位列多「全部」開關；多一列「初始化」，按部位把那部位的 FK 換成動作目前的值（先拿掉該部位 FK、重算一次姿勢再讀，所以讀到的是動作本身，不是舊的 FK）。原有的「復位」（拿掉該部位 FK）不變。
+- IK 頁：多一列「復位」，按部位把該部位的 IK 目標放回四肢目前的位置（`IkFromFk` 加部位參數；該部位沒有目標時建立全部目標），其他部位的目標不動。
+- 指令 `pose.fkinit <部位 0..6>`、`pose.ikreset <部位 0..4>`，控制通道與快捷鍵表都能用。
+- 注意 FK 部位：手臂屬於「身體」，「左手／右手」是手指。第一次測試拿上臂測「左手」初始化，值當然沒變；改用頸部測才對。
+- 驗證（83283571_p1）：頸部 FK 設 (20, 30, -50) 後「初始化 頸」回到動作的 (0, 0, 0)；IK←FK 後把左右手目標各移 30 cm，「復位 左手」後左手回到原位（差 2 cm 內，其他目標仍在拉），右手維持移開。遊戲與編輯器都連結成功，`verify_ok_studio --tag u35_1101` 6/6。
+
+#### U36 完成紀錄
+
+- 角色新欄位 `IkWeight`（整體權重），IK 目標新欄位 `RotationWeight`（旋轉權重）；原本的 `Weight` 在 UI 改叫「位置權重」。每個目標的位置、旋轉權重都乘上整體權重。
+- Rust `apply_studio_ik`：權重陣列長度是目標數兩倍時，後半是旋轉權重；否則照舊（旋轉跟位置同權重）。FFI 介面不變，舊呼叫不受影響。
+- IK 頁：位置權重、手腳開旋轉時的旋轉權重、整體權重，「上一個目標／下一個目標」在已啟用的目標間輪轉，「權重復位」把整體與目前目標的權重回 1。
+- 驗證（83283571_p1，左手目標移 25 cm 並轉 60°）：全 1 時手到位且轉向；旋轉權重 0 時位置不變、轉向取消；整體權重 0 時手回原位、不轉；位置權重 0.5 時走一半。「權重復位」按下後整體與目標權重都回 1。
+- Rust 在匯出的 HEAD 樹（只加這次的改動）上 `cargo check --release` 與 `--no-default-features` 都通過；遊戲與編輯器都連結成功，`verify_ok_studio --tag u36_1101` 6/6。
+
+#### U37 完成紀錄
+
+- 設定新欄位 `PointScale`（`settings.json` 的 `point_scale`，0.3～4）：畫面上 FK 骨點、IK 點的大小與點選範圍都乘它。設定窗多「控制點大小」一列。
+- FK 頁（骨骼打 key 那列下面）與 IK 頁底部加「操作軸大小」「控制點大小」兩個滑桿，改的就是設定裡的 `GizmoScale`、`PointScale`，即時存檔。
+- 驗證：`settings.json` 設 `gizmo_scale` 2、`point_scale` 3 後開場景，FK 頁滑桿顯示 2.0／3.0，骨點變成原本的 3 倍大；測完刪掉設定檔回預設。遊戲與編輯器都連結成功，`verify_ok_studio --tag u37_1101` 6/6。
+
+#### U38 完成紀錄
+
+- 資源檢查窗在缺件清單下多「角色」一段：每個角色一行，寫卡片類型（OK 卡（自帶資源）／原作卡／缺卡片）、已顯示或未顯示；原作卡再逐行列出卡片指名的 mod（sideloader 的 GUID），點任一行選取該角色。
+- 「重新讀取角色」（指令 `scene.reloadcharacters`）：沒顯示或有錯誤的角色清掉錯誤、重建；都正常時重建全部角色。補了 zipmod 之後按它就會重找。
+- 沒做到的：原作卡指名的 mod 裡哪幾個實際缺少。開卡時缺哪些 zipmod 只在 Rust 轉 OK 卡時記錄（`LAST_ABSENT_ZIPMODS`），執行期的 session 沒有對外的介面；要做得加 FFI，留給之後。Shader 異常也一樣沒有逐角色的資料可讀。
+- 驗證（83283571_p1）：OK 卡角色顯示「OK 卡（自帶資源），已顯示」；另加一張原作卡（遊戲 `UserData/chara/female` 的卡複製到 `Saved`，測完刪除）列出「原作卡，已顯示，卡片指名 19 個 mod」與各 GUID；按「重新讀取角色」狀態列顯示「重新讀取 1 個角色」，角色仍正常顯示。遊戲與編輯器都連結成功，`verify_ok_studio --tag u38_1101` 6/6。
+
+#### U39 完成紀錄
+
+材質編輯器（道具）補上 HS2Studio6 Material Editor 其餘的頁面，全部寫成既有的材質編輯（`EOKSceneMaterialEditKind`），執行期本來就會套用，隨場景存檔：
+- 貼圖槽：上方一個 PNG 路徑欄（可只寫 `UserData/Studio/texture` 底下的檔名）；每個槽「載入／清空／預設／匯出」，下面一列縮放 X／Y、偏移 X／Y（`TextureST`，起始值取材質自己的 `_ST`）。清空用 1×1 白圖代表沒有貼圖；匯出改過的槽存改過的圖，沒改的從基礎庫取原圖（`FOkModel::TexturePng`）。
+- Renderer：目前選的 renderer「顯示」開關與「陰影」切換（不投影／投影／雙面投影／只有影子），值回到預設時拿掉那筆編輯。
+- Shader：輸入 shader 名稱按 Enter 套用（空白回原本），Render Queue（-1 不改）。改 shader 會重建道具。
+- 「複製改動」「貼上改動」：複製目前材質的改動，貼到目前選的材質（可以是別的 renderer 或別的道具）；「道具全部重置」清掉這個道具的所有材質改動。
+- 匯出到 `Saved/OKStudio/MaterialExport/<id>_<名稱>/`（指令 `material.export uv|obj|textures`）：目前 renderer 的 UV 線框（1024 白底黑線）、整個道具的 OBJ（Unity 座標轉成右手、面朝向跟著反轉，含 UV）、每個 renderer 顯示的主貼圖與材質具名的全部貼圖。
+- 驗證（83283571_p1 的道具 #309 apart2，11 個 renderer）：OBJ、UV、貼圖共匯出 44 個檔；點「顯示」「陰影」寫出 Renderer 編輯（Enabled 0、ShadowCastingMode 2）；載入一張匯出的貼圖到 `_BumpMap`、清空 `_EmissionMap`、輸入 shader 都寫進文件；從 pipe 的材質複製後貼到 edge renderer 的另一個材質（kabe_3-1），兩邊的改動一致；「道具全部重置」後清空。測完刪掉匯出資料夾。遊戲與編輯器都連結成功，`verify_ok_studio --tag u39_1101` 6/6。
+- 沒做：Material Editor 的 shader 下拉清單（目前要自己輸入名稱）與角色的材質編輯（第 9 節不做）。
+
+#### U40 完成紀錄
+
+- 場景檔窗的資料夾欄多「包含子資料夾」：打開時列出目前資料夾底下所有層的場景（`.okscene` 與場景卡 PNG），略過匯入時拆出角色卡的 `*_cards` 資料夾。
+- 「選擇資料夾」：貼上任何資料夾路徑按 Enter 就切過去（遊戲以 `-game` 執行，不依賴編輯器的系統對話框）；路徑不存在時狀態列提示。
+- 一次最多列 500 張縮圖，其餘顯示「還有 N 個場景沒列出，請用搜尋縮小範圍」。
+- 驗證：KStudio 場景資料夾打開「包含子資料夾」後列出 7656 個場景（掃描約 3.8 秒），只建前 500 格；貼上 `D:/KoikatuSunshine/UserData/Studio/scene/vmd` 後切到該資料夾、57 個場景。遊戲與編輯器都連結成功，`verify_ok_studio --tag u40_1101` 6/6。
+
+#### U41 完成紀錄
+
+- 角色卡窗上方多「全部／女／男」切換：依卡片的性別（KK sex，讀整張卡，同一檔案版本只讀一次）篩掉另一性別與讀不出的卡。
+- 「加入預設角色」（指令 `add.defaultcharacter female|male`）：加入目前篩選性別的預設卡（篩「全部」時加女角）。預設卡是設定的 `default_card_female`／`default_card_male`，預覽區的「設為預設角色」把選中的卡設成它那個性別的預設；沒設時用 `Content/CharacterCards/Demo` 裡第一張該性別的卡。原作沒有卡片的「預設角色」，這裡用一張使用者自己選的卡代替（角色卡不進版控，所以不內建）。
+- 驗證：`CrowdAPNG` 資料夾 104 張，「女」剩 103 張，「男」只剩一張 sex=0 的卡；篩「男」時按「加入預設角色」加入 Demo 的 Male01。遊戲與編輯器都連結成功，`verify_ok_studio --tag u41_1101` 6/6。
+
+#### U42 完成紀錄
+
+- 設定窗「一般」多四列：主音量（0～1，主音訊裝置的暫時主音量）、背景時繼續執行（`t.IdleWhenNotForeground`）、垂直同步（照引擎／關／開，`r.VSync`）、幀率上限（-1 不改、0 不限、其他是上限，`t.MaxFPS`）。改了立刻套用，存在 `settings.json`（`master_volume`、`run_in_background`、`vsync`、`max_fps`）。
+- 工作室啟動時只套和預設不同的值：預設是「不改引擎」，所以測試啟動器加的 `t.MaxFPS 60` 等不會被蓋掉。主控台變數以 Console 的優先序設定，和啟動器的 `-ExecCmds` 同級。
+- 「全部恢復預設」後會再套一次（音量回 1、背景照常執行；垂直同步與幀率上限回到「不改」，引擎維持當下的值）。
+- 驗證：`settings.json` 設音量 0.5、背景不執行、VSync 0、幀率 30 後開工作室，log 讀回 `t.MaxFPS = "30"`、`r.VSync = "0"`、`t.IdleWhenNotForeground = "1"`（LastSetBy: Console），設定窗顯示這些值；測完刪掉設定檔。遊戲與編輯器都連結成功，`verify_ok_studio --tag u42_1101` 6/6。
+
+### U43～U52　對照 HS2Studio6 的第五批（2026-11-01，F 組）
+
+協調者要求再對照一次 `Saved/StudioUIRef/hs2/`。逐張看截圖，排除第 9 節不做的與 U0～U42 已做的，每項都 grep 確認程式裡沒有。依擺姿勢、擺場景時碰到的頻率排序。
+
+| 階段 | 內容 | 目前缺的 |
+|---|---|---|
+| U43 道具動畫與光照欄位 | 道具頁加動作模式、速度、起始時間、光源取消、發光色／強度、描邊色 | `FOKSceneItem` 已有 `AnimePattern`／`AnimeTime`／`AnimeSpeed`／`LightCancel`／`EmissionColor`／`EmissionPower`／`LineColor`，UI 一個都沒有（只能由 KStudio 匯入） |
+| U44 動畫位置姿態 | IK 頁「动画位置姿态」：IK 目標放到動作目前的位置；FK 頁補「FK←IK」（`53_bones.png`、`61_bones_ik.png`） | IK 頁只有 IK←FK；FK←IK 只在 IK 頁 |
+| U45 場景瀏覽器分頁 | 「第 N / M 頁」與上一頁／下一頁（`21_scene_card_choice.png`） | 超過 500 個只顯示提示，其餘要搜尋 |
+| U46 快搜種類篩選、刷新目錄 | 「筛选列表」限定道具／特效／地圖／動畫／姿勢／角色卡，「刷新目录」（`16_quick_search.png`） | 只有全部／收藏／最近／已隱藏；`FOKStudioCatalog::Reload()` 沒有入口 |
+| U47 資源目錄擴充 | 音效、姿勢、背景與前景框的根目錄可在設定裡加（`L_32_sound_external.png`、`17_pose_library.png`） | 設定只有角色卡根目錄 |
+| U48 外部音源重新掃描 | 外部音源窗「重新掃描」 | 要關掉再開視窗 |
+| U49 地圖窗「設定」 | 地圖窗「读取地图」旁的「设置」（`07_map.png`） | 地圖位置／時段在畫面設定分頁，地圖窗沒有入口 |
+| U50 角色卡路徑列 | 上一步／下一步／回根目錄與可輸入的路徑列（`51_kk_card1_full.png`） | 只有根目錄、子資料夾與上一層 |
+| U51 資源檢查「資源目錄」 | 資源檢查窗跳到設定的資源目錄頁（`15_save.png`） | 沒有 |
+| U52 材質編輯器隱藏屬性、接收陰影 | 「隐藏属性」開關、Renderer 接收陰影（`20_material_editor.png`） | `_OK*` 屬性一律不列；Renderer 只有投影模式 |
+
+前一批的「待確認」：道具動畫與 LightCancel 的 UI → U43；快搜「刷新目录」→ U46；地圖窗「设置」→ U49；「动画位置姿态」FK 頁已有（FK←姿勢），IK 頁 → U44。
+
+#### U43 完成紀錄
+
+- 道具頁「描邊寬度」下多七列：描邊顏色、發光顏色（色塊 alpha < 0 是「照模型」）、發光強度與光源取消（-1 照模型）、動作模式（0～99）、動畫起點（0～1）、動畫速度。
+- 發光顏色／強度以材質覆寫送到 `_EmissionColor`／`_EmissionIntensity`。描邊顏色原本只寫進材質覆寫 `_LineColor`，實測對 item_draw 描邊沒有作用，改成新欄位 `AKKPreviewActor::ItemLineColorOverride`（共用外掛，預設 alpha -1 不改）：建立道具部件時，有 item_draw 描邊的部件改用這個顏色。
+- 驗證：控制通道 `patch` 改輪 #45 的 lineColor／lineWidth、emission 後 `inspect` 讀回新值，重建道具沒有錯誤。畫面上沒能確認：測試場景（83283571_p1）裡有描邊的道具太小，改紅色、寬度 4 前後的截圖分不出差異；立方體 #312、道具 309 不畫描邊，也看不出發光。描邊與發光的實際畫面效果**尚未確認**。遊戲與編輯器都連結成功，`verify_ok_studio --tag u43_1101` 6/6。
+
+#### U44 完成紀錄
+
+- IK 頁第一顆按鈕「IK←動作」（指令 `pose.ikfromanim`）：暫時清掉 FK 與 IK、同步一次取得只有動作時的姿勢，再還原 FK，把 IK 目標放到動作讓手腳所在的位置。原本有開的效應器只更新那些，沒開的時候 13 個全放。
+- FK 頁按鈕列改成 FK←姿勢、FK←IK、IK←FK、清除 FK，兩頁都能互轉。
+- 驗證：左臂有 FK 時按 IK←動作，FK 保留（1 根骨）、IK 目標 13 個，左手目標在 58.3,-3.3,134.5（動作本身的手位置）。和 U43 同一次建置與 `verify_ok_studio --tag u43_1101` 6/6。
+
+#### U45 完成紀錄
+
+- 場景瀏覽器改成每頁 100 個、下方「‹ N / M 頁 ›」與資料夾、場景數；換資料夾、切子資料夾、貼路徑、搜尋都回到第 1 頁。取代 U40 的「只列前 500 個」。
+- 驗證：KStudio 場景打開「包含子資料夾」7656 個場景分成 77 頁，按 › 到 2 / 77 頁顯示下一批縮圖；只有 5 個的資料夾顯示 1 / 1 頁。和 U43 同一次建置與 verify 6/6。
+
+#### U46 完成紀錄
+
+- 快搜在「全部／收藏／最近／已隱藏」下多一列種類：全種類、道具、特效、地圖、動畫、姿勢、角色卡，和上一列可疊用。
+- 同一列右邊「刷新目錄」（指令 `catalog.reload`）：丟掉目錄、重新讀 `studio_items.json` 等目錄檔，重建子選單、屬性區與開著的視窗（指向舊目錄的「動作同步」指標一起清掉），狀態列顯示道具／動畫／特效數。
+- 驗證：搜「輪」全種類 15 筆（道具 13、動畫 2），「地圖」0 筆，「動畫」2 筆；刷新目錄後狀態列「8231 個道具、5805 個動畫、16 個特效」，快搜仍可用。遊戲與編輯器都連結成功，`verify_ok_studio --tag u46_1101` 6/6。
+
+#### U47 完成紀錄
+
+- 設定「資源目錄」分頁從只有角色卡，改成五組可加可移除的資料夾：角色卡、外部音源（.ogg／.wav）、姿勢庫（.dat）、背景圖、前景框（.png）。各自原本固定列的資料夾照舊列；存姿勢仍存到 `UserData/Studio/pose`。存在 `settings.json`（`audio_roots`、`pose_roots`、`bg_roots`、`frame_roots`）。
+- 外部音源窗、姿勢檔（`FOKStudioPose::Files()`，快搜與姿勢頁共用）、背景／前景框一覽都會掃加入的資料夾。
+- 驗證：在設定頁輸入三個資料夾，外部音源窗列出測試資料夾裡的 wav；加入 `D:/KoikatuSunshine/UserData/bg` 後背景一覽的 `bg_01.png` 有兩格（基礎庫一格、加入的資料夾一格）；存一個 KK 姿勢後把檔案移到加入的姿勢資料夾，快搜「姿勢」仍列出它。測完已從設定移除測試資料夾。遊戲與編輯器都連結成功，`verify_ok_studio --tag u47b_1101` 6/6。
+
+#### U48 完成紀錄
+
+- 外部音源窗的播放列多「重新掃描」，不用關掉視窗就能重新列出資料夾；沒有檔案時的提示改成叫人按它。
+- 驗證：開著視窗時在資料夾多放一個 wav，按重新掃描後清單從 1 個變 2 個。和 U47 同一次建置與 verify 6/6。
 
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 

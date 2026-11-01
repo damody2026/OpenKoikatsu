@@ -717,7 +717,7 @@ pub fn cli(lib: &Path, which: &str, prefab: Option<&str>) -> Result<(), String> 
             let shown = posed_static(&m);
             let (lo, hi) = crate::pose::aabb(&shown.positions);
             println!("{}\tverts={} tris={} tex={} {:?} detail={} normal={} mat={:?} skel={} bounds=[{:.3},{:.3},{:.3}]..[{:.3},{:.3},{:.3}]", m.name, m.positions.len(), m.indices.len() / 3, m.texture_name,
-                m.texture_png.as_ref().map(|v| v.len()), m.detail_mask_png.is_some(), m.normal_map_png.is_some(), m.mat.as_ref().map(|x| (&x.name, &x.shader)),
+                m.texture_png.as_ref().map(|v| v.len()), m.detail_mask_png.is_some(), m.normal_map_png.is_some(), m.mat.as_ref().map(|x| (&x.name, &x.shader, x.render_queue)),
                 m.smr_skel.as_ref().map(|k| k.names.len()).unwrap_or(0), lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]);
             if !m.vertex_colors.is_empty() {
                 let n = m.vertex_colors.len() as f32;

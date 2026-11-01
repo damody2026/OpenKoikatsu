@@ -99,6 +99,10 @@ struct OKSTUDIO_API FOKSceneIkTarget
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose", meta = (UIMin = "0", UIMax = "1"))
 	float Weight = 1.f;
 
+	/** How far a hand / foot turns to Euler, 0..1 (HS2Studio6 旋轉權重), apart from the position weight. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose", meta = (UIMin = "0", UIMax = "1"))
+	float RotationWeight = 1.f;
+
 	bool operator==(const FOKSceneIkTarget& O) const = default;
 };
 
@@ -264,6 +268,16 @@ struct OKSTUDIO_API FOKSceneCharacter
 	/** Parts whose IK is switched off (bit per IkPartOf part: body, left arm, right arm, left leg, right leg). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
 	int32 IkPartsOff = 0;
+
+	/** The whole IK's weight, 0..1 (HS2Studio6 整體權重): every target's position and rotation weight is scaled by it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose", meta = (UIMin = "0", UIMax = "1"))
+	float IkWeight = 1.f;
+
+	/** Studio joint correction (関節補正, OICharInfo.expression): bit per ExpressionBone category, 0 left arm, 1 right arm,
+	 *  2 left leg, 3 right leg, 4 left forearm, 5 right forearm, 6 left thigh, 7 right thigh. Bust and accessory follow
+	 *  always run. Studio's default is all off (so are scenes from before the field: OK Studio ran none then). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
+	int32 JointCorrection = 0;
 
 	/** Studio voice list (VoiceCtrl): played in order on the character, the mouth following the sound. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Voice")
@@ -452,8 +466,8 @@ struct OKSTUDIO_API FOKSceneItem
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	float LightCancel = -1.f;
 
-	/** Studio's item emission colour / power and outline colour (OIItemInfo), kept for the scene; alpha / value < 0: the
-	 *  model's. Not written to the materials yet (the game writes them only to the materials an item flags). */
+	/** Studio's item emission colour / power and outline colour (OIItemInfo); alpha / value < 0: the model's. Emission is written as
+	 *  _EmissionColor / _EmissionIntensity to the materials that have them; the line colour is the item_draw outline's. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item")
 	FLinearColor EmissionColor = FLinearColor(1.f, 1.f, 1.f, -1.f);
 
@@ -541,8 +555,7 @@ struct OKSTUDIO_API FOKSceneCamera
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "5", ClampMax = "170"))
 	float Fov = 40.f;
 
-	/** Near clipping plane (cm; <= 0: the engine's). Unreal draws perspective views without a far plane: Far is kept for
-	 *  the scene file and the UI, not applied. */
+	/** Near and far clipping planes (cm; <= 0: the engine's near plane, no far plane). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	float Near = 0.f;
 
@@ -940,6 +953,10 @@ public:
 	/** Camera object the scene is viewed through (-1: the free camera). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
 	int32 ActiveCamera = -1;
+
+	/** The free view's lens (HS2Studio6 当前视口镜头): field of view, near / far planes, orthographic. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
+	FOKSceneCamera FreeView;
 
 	/** Studio map of the scene (catalogue no; -1: none). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")

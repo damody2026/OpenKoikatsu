@@ -115,6 +115,7 @@ namespace
 			Sound->SetBoolField(TEXT("outside_playing"), G.IsOutsideSoundPlaying());
 			O->SetObjectField(TEXT("sound"), Sound);
 		}
+		O->SetObjectField(TEXT("free_view"), FJsonObjectConverter::UStructToJsonObject(G.Document->FreeView));
 		// The scene post passes' shaders and how many blendables the view's camera draws (sun shafts only once ready).
 		O->SetStringField(TEXT("post_opaque"), OKStudioScenePostMaterialState(0));
 		O->SetStringField(TEXT("post_shafts"), OKStudioScenePostMaterialState(1));
@@ -287,6 +288,16 @@ namespace
 				if (!FJsonObjectConverter::JsonObjectToUStruct(Now.ToSharedRef(), &Patched)) return Result(false, TEXT("sound fields do not fit"));
 				Doc->Sound = Patched;
 			}
+			// The free view's lens ({"free_view": {"fov": 30, "bOrtho": true, ...}}, FOKSceneCamera's fields).
+			const TSharedPtr<FJsonObject>* LensPatch = nullptr;
+			if (J->TryGetObjectField(TEXT("free_view"), LensPatch))
+			{
+				TSharedPtr<FJsonObject> Now = FJsonObjectConverter::UStructToJsonObject(Doc->FreeView);
+				DeepMerge(Now, *LensPatch);
+				FOKSceneCamera Patched;
+				if (!FJsonObjectConverter::JsonObjectToUStruct(Now.ToSharedRef(), &Patched)) return Result(false, TEXT("free_view fields do not fit"));
+				Doc->FreeView = Patched;
+			}
 			double D;
 			if (J->TryGetNumberField(TEXT("map"), D)) Doc->Map = int32(D);
 			const TSharedPtr<FJsonObject>* MapT = nullptr;
@@ -361,6 +372,7 @@ namespace
 			O->SetArrayField(TEXT("ik"), Ik);
 			O->SetNumberField(TEXT("fk_parts_off"), X->Character.FkPartsOff);
 			O->SetNumberField(TEXT("ik_parts_off"), X->Character.IkPartsOff);
+			O->SetNumberField(TEXT("joint_correction"), X->Character.JointCorrection);
 			O->SetArrayField(TEXT("look_point"), Vec(X->Character.LookPoint));
 			// What the character shows now (the actor's own state, not the document's): checks for the face and look controls.
 			O->SetNumberField(TEXT("face_eyes_open"), A->FaceOpen01[0]);

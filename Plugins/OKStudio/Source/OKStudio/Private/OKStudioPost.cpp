@@ -27,9 +27,10 @@ namespace
 	 *   pixels (sky, background) feed it, dot(max(colour - threshold, 0), 1) times saturate(0.5 - distance to the sun).
 	 *   The four radial blurs move a tap to the sun by 1 - prod(1 - j_k b_k) (b_k: 3 x 0.0013, 6/768, 12/768,
 	 *   18/768); the two largest are sampled fully (36 taps), the two smallest by their mean.
-	 * Far: more than 900 m away (the background plane is at 1 km, the sky dome at 10 km), or a surface Unity's depth
-	 *   texture leaves out (render queue past 2500, such as Studio's basic shapes at 3000: SunShafts sees the far plane
-	 *   there and their colour feeds the shafts). OKSceneActor draws those into custom depth with stencil 255.
+	 * Far: more than 900 m away (the background plane is at 1 km, the sky dome at 10 km) in Unity's depth texture, which
+	 *   holds only render queues up to 2500 (and StylizedWater): Studio's basic shapes at 3000 are not in it, SunShafts
+	 *   sees what is behind them, and where that is the sky their colour feeds the shafts. OKSceneActor draws what the
+	 *   texture holds into custom depth, read here as that texture.
 	 */
 	const TCHAR* GStudioPostCode = TEXT(R"(
 float2 VUV = GetViewportUV(Parameters);
@@ -88,6 +89,9 @@ if (AOOn > 0.5 && !bFar)
 }
 if (ShaftsOn > 0.5)
 {
+	// OK_STUDIO_SHAFTS_DEPTH=show (diagnostic): red where the shafts read far, green the custom depth rising to 50 m, blue
+	// where a blended part wrote it (its draw-order rank).
+	if (ShaftsAllFar > 1.5) { float Dc = OK_STENCIL(VUV) > 0.5 ? OK_DEPTH(VUV) : OK_CUSTOM_DEPTH(VUV); return float3(Dc > FarM ? 1.0 : 0.0, saturate(OK_CUSTOM_DEPTH(VUV) / 50.0), OK_STENCIL(VUV) > 0.5 ? 1.0 : 0.0); }
 	const float2 Sun = float2(0.5, 0.5);
 	const float B1 = 3.0 * 0.0013020834, B2 = 3.0 * 6.0 / 768.0, B3 = 3.0 * 12.0 / 768.0, B4 = 3.0 * 18.0 / 768.0;
 	float Small = (1.0 - 2.5 * B1) * (1.0 - 2.5 * B2);
@@ -97,10 +101,13 @@ if (ShaftsOn > 0.5)
 	{
 		float Keep = Small * (1.0 - j3 * B3) * (1.0 - j4 * B4);
 		float2 T = Sun - (Sun - VUV) * Keep;
-		float Dt = OK_DEPTH(T);
-		// The visible surface is one the depth texture leaves out: the marked parts' custom depth is where it is.
-		bool bAbsent = OK_STENCIL(T) > 254.5 && abs(OK_CUSTOM_DEPTH(T) - Dt) < 0.002 * Dt + 0.01;
-		if (Dt > FarM || bAbsent || ShaftsAllFar > 0.5)
+		// Unity's depth texture there: custom depth, where the scene draws what that texture holds (OKSceneActor::
+		// MarkDepthTexture). Behind a part it leaves out is what lies behind it: the sky makes the part a source, the water
+		// under the stage's front board does not. A blended part that writes depth puts its own there for the draw order
+		// (stencil: its rank); Unity's texture leaves it out, and the scene depth there is what lies behind it (a blended
+		// part does not write it): the sky through a pane of glass is far.
+		float Dt = OK_STENCIL(T) > 0.5 ? OK_DEPTH(T) : OK_CUSTOM_DEPTH(T);
+		if (Dt > FarM || ShaftsAllFar > 0.5)
 		{
 			float3 Ct = OK_COLOR(T);
 			// The shaft source lives in an 8-bit render texture (RenderTexture.GetTemporary's ARGB32): each tap is at
@@ -272,9 +279,9 @@ void OKStudioApplyScenePostMaterial(const FOKScenePost& Post, FPostProcessSettin
 		M->SetVectorParameterValue(TEXT("AOTint"), Post.AmbientOcclusionTint);
 		M->SetScalarParameterValue(TEXT("AORadius"), FMath::Max(Post.AmbientOcclusionRadius, 0.001f));
 		M->SetScalarParameterValue(TEXT("ShaftsOn"), Index == 1 ? 1.f : 0.f);
-		// OK_STUDIO_SHAFTS_DEPTH=0: every pixel feeds the shafts, near or far (diagnostic).
-		static const bool bShaftsAllFar = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_SHAFTS_DEPTH")) == TEXT("0");
-		M->SetScalarParameterValue(TEXT("ShaftsAllFar"), bShaftsAllFar ? 1.f : 0.f);
+		// OK_STUDIO_SHAFTS_DEPTH=0: every pixel feeds the shafts, near or far; =show: the depth they read (diagnostics).
+		static const FString ShaftsDepth = FPlatformMisc::GetEnvironmentVariable(TEXT("OK_STUDIO_SHAFTS_DEPTH"));
+		M->SetScalarParameterValue(TEXT("ShaftsAllFar"), ShaftsDepth == TEXT("show") ? 2.f : ShaftsDepth == TEXT("0") ? 1.f : 0.f);
 		// SunShafts.sunColor and sunThreshold reach the shader as vectors (SetVector): not linearised.
 		M->SetVectorParameterValue(TEXT("SunColor"), Post.SunShaftColor);
 		M->SetVectorParameterValue(TEXT("SunThreshold"), Post.SunShaftThreshold);

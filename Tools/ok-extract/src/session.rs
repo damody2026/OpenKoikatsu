@@ -1213,6 +1213,10 @@ pub struct OkSession {
     pub(crate) studio_ik_rotations: Vec<(usize, [f32;4])>,
     /// Studio IK weights, one per `studio_ik` target (missing: 1, the target is reached).
     pub(crate) studio_ik_weights: Vec<f32>,
+    /// A Studio character's ExpressionBone categories (pose::EXPRESSION_ALL bits, Studio's joint correction toggles).
+    /// Studio gives every character the component, so a set mask runs it whatever the clip or source; None keeps
+    /// the clip-scene rule (all categories, Studio clips with a game source only).
+    pub(crate) expression_mask: Option<u16>,
     pub correct: Vec<CorrectInfo>,
     pub sex: i32,
     pub type_bone: i32,
@@ -1879,8 +1883,9 @@ impl OkSession {
             // limbs while FK is enabled, even when only fingers are selected.
             if !self.game_root.as_os_str().is_empty() && crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode) {
                 if let Some(config)=&self.pv_config {config.apply(sk,self.pv_mask,self.pv_fk || !self.user_fk.is_empty());}
-                crate::pose::apply_expression_bone(sk);
+                if self.expression_mask.is_none() { crate::pose::apply_expression_bone(sk); }
             }
+            if let Some(mask) = self.expression_mask { crate::pose::apply_expression_bone_masked(sk, mask); }
             let names: Vec<String> = self.abm.iter().map(|b| b.name.clone()).collect();
             let base = crate::pose::capture_baseline(sk, &names);
             let saved_cf_j: Vec<(i64, crate::finalik::Quat)> = if self.anim_scene_mode == 4 && self.user_fk.is_empty() { sk.tfs.iter().filter(|(_, tf)| tf.name.starts_with("cf_j_")).map(|(&id, tf)| (id, tf.rot)).collect() } else { Vec::new() }; crate::pose::apply_abm(sk, &self.abm, 0, &base); if !saved_cf_j.is_empty() { for (id, rot) in saved_cf_j { if let Some(tf) = sk.tfs.get_mut(&id) { tf.rot = rot; } } sk.rebuild_worlds(); }
@@ -2159,8 +2164,9 @@ impl OkSession {
             let t = std::time::Instant::now();
             if !self.game_root.as_os_str().is_empty() && crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode) {
                 if let Some(config)=&self.pv_config {config.apply(sk,self.pv_mask,self.pv_fk || !self.user_fk.is_empty());}
-                crate::pose::apply_expression_bone(sk);
+                if self.expression_mask.is_none() { crate::pose::apply_expression_bone(sk); }
             }
+            if let Some(mask) = self.expression_mask { crate::pose::apply_expression_bone_masked(sk, mask); }
             prof::add(14, t);
             let t = std::time::Instant::now();
             let base = crate::pose::capture_abm_baseline(sk,&self.abm);
@@ -3346,6 +3352,7 @@ impl SessionBlob {
             studio_ik: Vec::new(),
             studio_ik_rotations: Vec::new(),
             studio_ik_weights: Vec::new(),
+            expression_mask: None,
             correct: self.correct,
             sex: self.sex,
             type_bone: self.type_bone,
@@ -6598,8 +6605,13 @@ pub(crate) fn apply_studio_ik(sk: &mut crate::pose::Skeleton, solver: &mut Optio
     for effector in solver.effectors.iter_mut() { effector.target = None; effector.position_weight = 0.; effector.rotation_weight = 0.; effector.position_offset = [0.; 3]; }
     // 9..12: elbow / knee targets bend the limbs (left arm, right arm, left leg, right leg = bend constraints 1..4).
     for bend in solver.bend_constraints.iter_mut() { bend.goal_position = None; bend.weight = 0.; }
-    // HS2Studio6 IK weights: a target pulls (and turns its hand / foot) only that far.
+    // HS2Studio6 IK weights: a target pulls (and turns its hand / foot) only that far. Twice as many weights as targets:
+    // the second half are the rotation weights (HS2Studio6 位置／旋轉權重), otherwise a target turns as far as it pulls.
     let weight_of = |index: usize| targets.iter().position(|(i, _)| *i == index).and_then(|n| weights.get(n)).copied().unwrap_or(1.).clamp(0., 1.);
+    let rotation_weight_of = |index: usize| {
+        if weights.len() != 2 * targets.len() { return weight_of(index); }
+        targets.iter().position(|(i, _)| *i == index).and_then(|n| weights.get(targets.len() + n)).copied().unwrap_or(1.).clamp(0., 1.)
+    };
     for (index, position) in targets {
         let w = weight_of(*index);
         if *index >= STUDIO_BEND_FIRST {
@@ -6607,7 +6619,7 @@ pub(crate) fn apply_studio_ik(sk: &mut crate::pose::Skeleton, solver: &mut Optio
         } else if let Some(effector) = solver.effectors.get_mut(*index) { effector.position = *position; effector.position_weight = w; }
     }
     for (index, rotation) in rotations {
-        if let Some(effector)=solver.effectors.get_mut(*index) { effector.rotation=*rotation; effector.rotation_weight=weight_of(*index); }
+        if let Some(effector)=solver.effectors.get_mut(*index) { effector.rotation=*rotation; effector.rotation_weight=rotation_weight_of(*index); }
     }
     solver.update(&mut ik);
     ik.sk.rebuild_worlds();

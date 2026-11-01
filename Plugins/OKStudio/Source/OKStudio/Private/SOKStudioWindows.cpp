@@ -1,6 +1,11 @@
 // OK Studio panel: floating windows and their saved places, the dialog, the workspace tree's editing, scene files
 // (browser, backups, the open report, the resource check, stories), screenshots, the timeline and its export, settings.
 #include "SOKStudioPanel.h"
+#include "KKCardReader.h"
+#include "KKCardWorkspace.h"
+#include "KKRustExtract.h"
+#include "ImageUtils.h"
+#include "Misc/Base64.h"
 #include "Algo/Find.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "Misc/ConfigCacheIni.h"
@@ -559,7 +564,22 @@ void SOKStudioPanel::ScanScenes()
 {
 	if (SceneFolder.IsEmpty()) SceneFolder = UOKStudioGame::SceneDirectory();
 	SceneList.Reset();
-	if (SceneFolder == UOKStudioGame::SceneDirectory()) SceneList = UOKStudioGame::SceneFiles();
+	if (bSceneRecursive)
+	{
+		// 包含子資料夾 (HS2Studio6): every scene under the folder, except the cards an import took out of a scene
+		// ("<scene>_cards", character PNGs only).
+		TArray<FString> Found;
+		IFileManager::Get().FindFilesRecursive(Found, *SceneFolder, TEXT("*.png"), true, false);
+		TArray<FString> More;
+		IFileManager::Get().FindFilesRecursive(More, *SceneFolder, TEXT("*.okscene"), true, false);
+		Found.Append(More);
+		for (const FString& F : Found)
+		{
+			if (FPaths::GetPath(F).Contains(TEXT("_cards"))) continue;
+			if (F.EndsWith(TEXT(".okscene")) || FOKSceneCard::Kind(F) != FOKSceneCard::EKind::None) SceneList.Add(F);
+		}
+	}
+	else if (SceneFolder == UOKStudioGame::SceneDirectory()) SceneList = UOKStudioGame::SceneFiles();
 	else
 	{
 		TArray<FString> Names;
@@ -641,7 +661,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 	{
 		if (Folder.IsEmpty()) return;
 		Folders->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 2.f)
-			[Button(FText::FromString(Label), [this, Folder] { SceneFolder = Folder; ScenePick.Reset(); ScanScenes(); DeferFloat(TEXT("scenes")); }, 0.f, 18.f, SceneFolder == Folder, 10.f)];
+			[Button(FText::FromString(Label), [this, Folder] { SceneFolder = Folder; ScenePick.Reset(); ScenePage = 0; ScanScenes(); DeferFloat(TEXT("scenes")); }, 0.f, 18.f, SceneFolder == Folder, 10.f)];
 	};
 	FolderButton(TEXT("場景（UserData）"), UOKStudioGame::SceneDirectory());
 	FolderButton(TEXT("KStudio 場景"), KStudioFolder());
@@ -656,11 +676,31 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 	};
 	for (const FString& S : Subs) if (!SceneCards(S)) FolderButton(TEXT("▸ ") + S, SceneFolder / S);
 	if (SceneFolder != UOKStudioGame::SceneDirectory() && SceneFolder != KStudioFolder() && SceneFolder != UOKStudioGame::BackupDirectory()) FolderButton(TEXT(".. 上一層"), FPaths::GetPath(SceneFolder));
+	// 包含子資料夾 and 選擇資料夾 (HS2Studio6 场景卡选择): any folder, typed or pasted, Enter goes there.
+	Folders->AddSlot().AutoHeight().Padding(0.f, 6.f, 0.f, 2.f)
+		[CheckBox(TEXT("包含子資料夾"), [this] { return bSceneRecursive; }, [this](bool B) { bSceneRecursive = B; ScenePick.Reset(); ScenePage = 0; ScanScenes(); DeferFloat(TEXT("scenes")); })];
+	Folders->AddSlot().AutoHeight().Padding(0.f, 2.f)
+		[SNew(SBox).HeightOverride(18.f)[SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("選擇資料夾（貼上路徑按 Enter）")))
+			.OnTextCommitted_Lambda([this](const FText& T, ETextCommit::Type C)
+			{
+				if (C != ETextCommit::OnEnter) return;
+				const FString Dir = FPaths::ConvertRelativePathToFull(T.ToString().TrimStartAndEnd().TrimQuotes());
+				if (Dir.IsEmpty() || !FPaths::DirectoryExists(Dir)) { SetStatus(TEXT("沒有這個資料夾：") + Dir); return; }
+				SceneFolder = Dir;
+				ScenePick.Reset();
+				ScenePage = 0; ScanScenes();
+				DeferFloat(TEXT("scenes"));
+			})]];
 
 	// Pictures of the scenes, four across.
 	TSharedRef<SWrapBox> Grid = SNew(SWrapBox).UseAllottedSize(true);
-	for (const FString& F : SceneList)
+	// Pages of 100 (HS2Studio6 第 N / M 页): a whole tree (包含子資料夾) can be thousands of scenes.
+	constexpr int32 PerPage = 100;
+	const int32 Pages = FMath::Max(1, (SceneList.Num() + PerPage - 1) / PerPage);
+	ScenePage = FMath::Clamp(ScenePage, 0, Pages - 1);
+	for (int32 Index = ScenePage * PerPage; Index < FMath::Min(SceneList.Num(), (ScenePage + 1) * PerPage); ++Index)
 	{
+		const FString& F = SceneList[Index];
 		const bool bPng = F.EndsWith(TEXT(".png"));
 		const FOKSceneCard::EKind K = bPng ? FOKSceneCard::Kind(F) : FOKSceneCard::EKind::Json;
 		const FString KindTag = K == FOKSceneCard::EKind::KStudio ? TEXT("[KStudio] ") : (!bPng ? TEXT("[.okscene] ") : TEXT(""));
@@ -721,7 +761,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 				else SaveNamed(SaveAsName);
 			}, 60.f, 20.f)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f, 0.f, 0.f)[SNew(SBox).WidthOverride(130.f).HeightOverride(20.f)[SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("搜尋"))).Text(FText::FromString(SceneSearch))
-				.OnTextCommitted_Lambda([this](const FText& T, ETextCommit::Type) { SceneSearch = T.ToString(); ScanScenes(); DeferFloat(TEXT("scenes")); })]]
+				.OnTextCommitted_Lambda([this](const FText& T, ETextCommit::Type) { SceneSearch = T.ToString(); ScenePage = 0; ScanScenes(); DeferFloat(TEXT("scenes")); })]]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(3.f, 0.f, 0.f, 0.f)[Button(FText::FromString(SceneSort == 1 ? TEXT("依名稱") : TEXT("依時間")), [this] { SceneSort = 1 - SceneSort; ScanScenes(); DeferFloat(TEXT("scenes")); }, 56.f, 20.f)]
 		]
 		+ SVerticalBox::Slot().FillHeight(1.f)
@@ -731,7 +771,14 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSceneBrowser()
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(4.f, 0.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(2.f)[SNew(SScrollBox) + SScrollBox::Slot()[Grid]]]
 			+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(140.f)[SNew(SScrollBox) + SScrollBox::Slot()[Pick]]]
 		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f)[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("%s　%d 個場景"), *SceneFolder, SceneList.Num())), 9.f, TextHint())];
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("‹")), [this] { if (ScenePage > 0) { --ScenePage; DeferFloat(TEXT("scenes")); } }, 24.f, 18.f, false, 10.f)]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.f, 0.f)[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("%d / %d 頁"), ScenePage + 1, Pages)), 9.f)]
+			+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("›")), [this, Pages] { if (ScenePage + 1 < Pages) { ++ScenePage; DeferFloat(TEXT("scenes")); } }, 24.f, 18.f, false, 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center).Padding(6.f, 0.f, 0.f, 0.f)[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("%s　%d 個場景"), *SceneFolder, SceneList.Num())), 9.f, TextHint())]
+		];
 }
 
 TSharedRef<SWidget> SOKStudioPanel::BuildBackups()
@@ -865,12 +912,15 @@ TSharedRef<SWidget> SOKStudioPanel::BuildOutsideSound()
 	auto Sound = [this]() -> FOKSceneSound* { return Game.IsValid() && Game->Document ? &Game->Document->Sound : nullptr; };
 	const FString Folder = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/audio"));
 	TArray<FString> Files;
-	for (const TCHAR* Ext : { TEXT("*.ogg"), TEXT("*.wav") })
-	{
-		TArray<FString> Found;
-		IFileManager::Get().FindFiles(Found, *(Folder / Ext), true, false);
-		for (const FString& F : Found) Files.Add(Folder / F);
-	}
+	TArray<FString> Folders = { Folder };
+	for (const FString& R : FOKStudioSettings::Get().AudioRoots) Folders.AddUnique(R);
+	for (const FString& Dir : Folders)
+		for (const TCHAR* Ext : { TEXT("*.ogg"), TEXT("*.wav") })
+		{
+			TArray<FString> Found;
+			IFileManager::Get().FindFiles(Found, *(Dir / Ext), true, false);
+			for (const FString& F : Found) Files.AddUnique(Dir / F);
+		}
 	// A scene's own file (an imported scene's copy beside its cards) is listed too.
 	if (const FOKSceneSound* S = Sound(); S && !S->Outside.IsEmpty() && Game.IsValid() && !Game->OutsideSoundFile().IsEmpty()) Files.AddUnique(Game->OutsideSoundFile());
 	Files.Sort();
@@ -881,7 +931,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildOutsideSound()
 				TAttribute<bool>::CreateLambda([this, F] { return Game.IsValid() && Game->OutsideSoundFile() == F; }), 10.f)];
 	if (Files.IsEmpty())
 	{
-		TSharedRef<STextBlock> Hint = OKStudioStyle::Label(FText::FromString(TEXT("把 .ogg 或 .wav 放進 ") + Folder + TEXT("，再開一次這個視窗。")), 10.f, TextHint());
+		TSharedRef<STextBlock> Hint = OKStudioStyle::Label(FText::FromString(TEXT("把 .ogg 或 .wav 放進 ") + Folder + TEXT("（或設定的資源目錄），再按「重新掃描」。")), 10.f, TextHint());
 		Hint->SetAutoWrapText(true);
 		SoundRows->AddSlot().AutoHeight()[Hint];
 	}
@@ -902,6 +952,8 @@ TSharedRef<SWidget> SOKStudioPanel::BuildOutsideSound()
 				TAttribute<bool>::CreateLambda([Sound] { const FOKSceneSound* S = Sound(); return S && S->bOutsidePlay; }), 10.f)]
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("停止")), [this, Sound] { if (FOKSceneSound* S = Sound()) { S->bOutsidePlay = false; Changed(); } }, 0.f, 20.f, false, 10.f)]
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[CheckBox(TEXT("循環"), [Sound] { const FOKSceneSound* S = Sound(); return S && S->bOutsideRepeat; }, [this, Sound](bool B) { if (FOKSceneSound* S = Sound()) { S->bOutsideRepeat = B; Changed(); } })]
+			// HS2Studio6 重新扫描: list the folders again without closing the window.
+			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("重新掃描")), [this] { DeferFloat(TEXT("outside")); }, 0.f, 20.f, false, 10.f)]
 		]
 		+ SVerticalBox::Slot().FillHeight(1.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(3.f)[SNew(SScrollBox) + SScrollBox::Slot()[SoundRows]]];
 }
@@ -1089,6 +1141,108 @@ TSharedRef<SWidget> SOKStudioPanel::BuildMaterialEditor()
 	TSharedRef<SVerticalBox> Materials = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()[Button(FText::FromString(Material.IsEmpty() ? TEXT("（無名材質）") : Material), [] {}, 0.f, 18.f, true, 10.f)]
 		+ SVerticalBox::Slot().AutoHeight().Padding(2.f)[OKStudioStyle::Label(FText::FromString(Shader), 9.f, TextHint())];
+	// One edit of the item (kind, material or renderer, property), or null; Put adds it when missing.
+	auto FindEdit = [this, ItemId](EOKSceneMaterialEditKind Kind, const FString& Target, const FString& Property) -> FOKSceneMaterialEdit*
+	{
+		FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr;
+		if (!X) return nullptr;
+		return X->Item.MaterialEdits.FindByPredicate([&](const FOKSceneMaterialEdit& E) { return E.Kind == Kind && E.Material == Target && (Property.IsEmpty() || E.Property == Property || TEXT("_") + E.Property == Property); });
+	};
+	auto Put = [this, ItemId, FindEdit](EOKSceneMaterialEditKind Kind, const FString& Target, const FString& Property) -> FOKSceneMaterialEdit*
+	{
+		FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr;
+		if (!X) return nullptr;
+		FOKSceneMaterialEdit* E = FindEdit(Kind, Target, Property);
+		if (!E) { E = &X->Item.MaterialEdits.AddDefaulted_GetRef(); E->Kind = Kind; E->Material = Target; E->Property = Property; }
+		return E;
+	};
+	auto Drop = [this, ItemId](EOKSceneMaterialEditKind Kind, const FString& Target, const FString& Property)
+	{
+		if (FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr)
+			X->Item.MaterialEdits.RemoveAll([&](const FOKSceneMaterialEdit& E) { return E.Kind == Kind && E.Material == Target && (E.Property == Property || TEXT("_") + E.Property == Property); });
+	};
+	// The picked renderer (HS2Studio6 Renderer 頁): shown or not, and how it casts shadows (Unity ShadowCastingMode).
+	OkMeshView PickedMesh{};
+	const FString Renderer = Shown->Session.PartAt(MaterialPart, PickedMesh) && PickedMesh.name ? FString(UTF8_TO_TCHAR(PickedMesh.name)) : FString();
+	if (!Renderer.IsEmpty())
+	{
+		static const TCHAR* ShadowNames[] = { TEXT("不投影"), TEXT("投影"), TEXT("雙面投影"), TEXT("只有影子") };
+		auto RendererValue = [FindEdit, Renderer](const TCHAR* Property, float Default) { const FOKSceneMaterialEdit* E = FindEdit(EOKSceneMaterialEditKind::Renderer, Renderer, Property); return E ? E->Value.R : Default; };
+		auto SetRenderer = [this, Put, Drop, Renderer](const TCHAR* Property, float Value, float Default)
+		{
+			if (FMath::IsNearlyEqual(Value, Default)) Drop(EOKSceneMaterialEditKind::Renderer, Renderer, Property);
+			else if (FOKSceneMaterialEdit* E = Put(EOKSceneMaterialEditKind::Renderer, Renderer, Property)) E->Value = FLinearColor(Value, 0.f, 0.f, 0.f);
+			Changed();
+		};
+		Materials->AddSlot().AutoHeight().Padding(0.f, 4.f, 0.f, 1.f)[OKStudioStyle::Label(FText::FromString(TEXT("Renderer")), 10.f, TextHint())];
+		Materials->AddSlot().AutoHeight()[CheckBox(TEXT("顯示"), [RendererValue] { return RendererValue(TEXT("Enabled"), 1.f) > 0.5f; }, [SetRenderer](bool B) { SetRenderer(TEXT("Enabled"), B ? 1.f : 0.f, 1.f); })];
+		Materials->AddSlot().AutoHeight().Padding(0.f, 1.f)[Button(TAttribute<FText>::CreateLambda([RendererValue] { return FText::FromString(FString(TEXT("陰影：")) + ShadowNames[FMath::Clamp(FMath::RoundToInt(RendererValue(TEXT("ShadowCastingMode"), 1.f)), 0, 3)]); }),
+			[RendererValue, SetRenderer] { SetRenderer(TEXT("ShadowCastingMode"), float((FMath::Clamp(FMath::RoundToInt(RendererValue(TEXT("ShadowCastingMode"), 1.f)), 0, 3) + 1) % 4), 1.f); }, 0.f, 18.f, false, 10.f)];
+	}
+	// The material's shader and render queue (Material Editor 换 shader): the item is built again with them.
+	{
+		auto ShaderEdit = [FindEdit, Material] { return FindEdit(EOKSceneMaterialEditKind::Shader, Material, FString()); };
+		Materials->AddSlot().AutoHeight().Padding(0.f, 4.f, 0.f, 1.f)[OKStudioStyle::Label(FText::FromString(TEXT("Shader（Enter 套用；空白回原本）")), 10.f, TextHint())];
+		Materials->AddSlot().AutoHeight()[SNew(SBox).HeightOverride(18.f)[TextBox([ShaderEdit, Shader] { const FOKSceneMaterialEdit* E = ShaderEdit(); return E ? E->Text : Shader; },
+			[this, Put, Drop, Material, Shader, ShaderEdit](const FString& V)
+			{
+				const FString Name = V.TrimStartAndEnd();
+				const FOKSceneMaterialEdit* Old = ShaderEdit();
+				const float Queue = Old ? Old->Value.R : -1.f;
+				if (Name.IsEmpty() || (Name == Shader && Queue < 0.f)) Drop(EOKSceneMaterialEditKind::Shader, Material, FString());
+				else if (FOKSceneMaterialEdit* E = Put(EOKSceneMaterialEditKind::Shader, Material, FString())) { E->Text = Name; E->Value = FLinearColor(Queue, 0.f, 0.f, 0.f); }
+				Changed();
+			}, Shader)]];
+		Materials->AddSlot().AutoHeight().Padding(0.f, 1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.5f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("Render Queue")), 9.f)]
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SBox).HeightOverride(18.f)[Spin([ShaderEdit] { const FOKSceneMaterialEdit* E = ShaderEdit(); return E ? E->Value.R : -1.f; },
+				[this, Put, Material, Shader, ShaderEdit](float V)
+				{
+					// -1 keeps the material's own queue; a queue alone keeps the shader.
+					const FOKSceneMaterialEdit* Old = ShaderEdit();
+					const FString Name = Old && !Old->Text.IsEmpty() ? Old->Text : Shader;
+					if (FOKSceneMaterialEdit* E = Put(EOKSceneMaterialEditKind::Shader, Material, FString())) { E->Text = Name; E->Value = FLinearColor(FMath::RoundToFloat(FMath::Clamp(V, -1.f, 5000.f)), 0.f, 0.f, 0.f); }
+					Changed();
+				}, -1.f, 5000.f, 1.f)]]
+		];
+	}
+	// Copy / paste a material's edits (onto the material picked then, of this or another item) and the item's reset.
+	Materials->AddSlot().AutoHeight().Padding(0.f, 4.f, 0.f, 1.f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("複製改動")), [this, ItemId, Material]
+		{
+			const FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr;
+			if (!X) return;
+			MaterialClipboard = X->Item.MaterialEdits.FilterByPredicate([&](const FOKSceneMaterialEdit& E) { return E.Material == Material && E.Kind != EOKSceneMaterialEditKind::Renderer; });
+			SetStatus(FString::Printf(TEXT("複製了 %d 筆材質改動"), MaterialClipboard.Num()));
+		}, 0.f, 18.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("貼上改動")), [this, ItemId, Material]
+		{
+			FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr;
+			if (!X || MaterialClipboard.IsEmpty()) return;
+			X->Item.MaterialEdits.RemoveAll([&](const FOKSceneMaterialEdit& E) { return E.Material == Material && E.Kind != EOKSceneMaterialEditKind::Renderer; });
+			for (FOKSceneMaterialEdit E : MaterialClipboard) { E.Material = Material; X->Item.MaterialEdits.Add(E); }
+			Changed();
+			RebuildFloat(TEXT("material"));
+			SetStatus(FString::Printf(TEXT("貼上 %d 筆材質改動"), MaterialClipboard.Num()));
+		}, 0.f, 18.f, false, 10.f)]
+	];
+	Materials->AddSlot().AutoHeight().Padding(0.f, 1.f)[Button(FText::FromString(TEXT("道具全部重置")), [this, ItemId]
+	{
+		if (FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr) { X->Item.MaterialEdits.Reset(); Changed(); RebuildFloat(TEXT("material")); }
+	}, 0.f, 18.f, false, 10.f)];
+	// Exports (HS2Studio6 导出): the picked renderer's UV layout, the item as OBJ, every texture it shows.
+	Materials->AddSlot().AutoHeight().Padding(0.f, 4.f, 0.f, 1.f)[OKStudioStyle::Label(FText::FromString(TEXT("匯出到 Saved/OKStudio/MaterialExport")), 9.f, TextHint())];
+	Materials->AddSlot().AutoHeight()
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("UV")), Cmd(TEXT("material.export"), TEXT("uv")), 0.f, 18.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("OBJ")), Cmd(TEXT("material.export"), TEXT("obj")), 0.f, 18.f, false, 10.f)]
+		+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("貼圖")), Cmd(TEXT("material.export"), TEXT("textures")), 0.f, 18.f, false, 10.f)]
+	];
 	// The item's edit of this material's property (empty material: every material), or null.
 	auto EditOf = [this, ItemId, Material](const FString& Property) -> FOKSceneMaterialEdit*
 	{
@@ -1147,14 +1301,93 @@ TSharedRef<SWidget> SOKStudioPanel::BuildMaterialEditor()
 		Line(Property, Spin([EditOf, Property, Source] { const FOKSceneMaterialEdit* E = EditOf(Property); return E ? E->Value.R : Source; },
 			[Write, Property](float V) { Write(Property, EOKSceneMaterialEditKind::Float, FLinearColor(V, 0.f, 0.f, 0.f)); }, -100.f, 100.f, 0.01f));
 	}
+	// Texture slots (HS2Studio6 纹理): load a PNG (a path, or a name under UserData/Studio/texture), clear it, back to the
+	// source, export what it shows; scale and offset (_ST).
+	if (!Textures.IsEmpty())
+		Properties->AddSlot().AutoHeight().Padding(0.f, 2.f)[SNew(SBox).HeightOverride(18.f)[TextBox([this] { return MaterialTexturePath; }, [this](const FString& V) { MaterialTexturePath = V.TrimStartAndEnd().TrimQuotes(); }, TEXT("載入用的 PNG 路徑（或 UserData/Studio/texture 下的檔名）"))]];
 	for (const TPair<FString, FString>& T : Textures)
-		if (Shows(T.Key))
-			Properties->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)
+	{
+		if (!Shows(T.Key)) continue;
+		const FString Property = T.Key;
+		const FString SourceName = T.Value;
+		auto TextureEdit = [FindEdit, Material, Property] { return FindEdit(EOKSceneMaterialEditKind::Texture, Material, Property); };
+		Properties->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.42f)[OKStudioStyle::Label(TAttribute<FText>::CreateLambda([TextureEdit, Property] { return FText::FromString((TextureEdit() ? TEXT("● ") : TEXT("")) + Property); }), 10.f)]
+			+ SHorizontalBox::Slot().FillWidth(0.58f)[OKStudioStyle::Label(TAttribute<FText>::CreateLambda([TextureEdit, SourceName]
+				{
+					const FOKSceneMaterialEdit* E = TextureEdit();
+					return FText::FromString(E ? (E->Value.A < 0.f ? TEXT("（已清空）") : TEXT("（載入的圖）")) : SourceName.IsEmpty() ? TEXT("（無貼圖）") : SourceName);
+				}), 9.f, TextHint())]
+		];
+		auto Load = [this, Put, Material, Property]
+		{
+			FString Path = MaterialTexturePath;
+			if (!Path.IsEmpty() && FPaths::IsRelative(Path))
+			{
+				const FString Under = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("UserData/Studio/texture") / Path);
+				Path = FPaths::FileExists(Under) ? Under : FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / Path);
+			}
+			TArray<uint8> Png;
+			static const uint8 Signature[8] = { 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A };
+			if (Path.IsEmpty() || !FFileHelper::LoadFileToArray(Png, *Path) || Png.Num() < 8 || FMemory::Memcmp(Png.GetData(), Signature, 8)) { SetStatus(TEXT("載入貼圖：讀不到 PNG ") + Path); return; }
+			if (FOKSceneMaterialEdit* E = Put(EOKSceneMaterialEditKind::Texture, Material, Property)) { E->Text = FBase64::Encode(Png); E->Value = FLinearColor::White; }
+			Changed();
+			SetStatus(FString::Printf(TEXT("%s 換成 %s"), *Property, *FPaths::GetCleanFilename(Path)));
+		};
+		auto Clear = [this, Put, Material, Property]
+		{
+			// A 1x1 white texture stands for "none" (what Unity binds for an empty white-default slot); alpha -1 marks it.
+			TArray64<uint8> Png;
+			FImageUtils::PNGCompressImageArray(1, 1, TArray<FColor>{ FColor::White }, Png);
+			if (FOKSceneMaterialEdit* E = Put(EOKSceneMaterialEditKind::Texture, Material, Property)) { E->Text = FBase64::Encode(Png.GetData(), uint32(Png.Num())); E->Value = FLinearColor(1.f, 1.f, 1.f, -1.f); }
+			Changed();
+		};
+		auto Back = [this, Drop, Material, Property] { Drop(EOKSceneMaterialEditKind::Texture, Material, Property); Drop(EOKSceneMaterialEditKind::TextureST, Material, Property); Changed(); };
+		auto Export = [this, Material, Property, TextureEdit, SourceName, ItemId]
+		{
+			TArray<uint8> Png;
+			if (const FOKSceneMaterialEdit* E = TextureEdit()) FBase64::Decode(E->Text, Png);
+			else if (const FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr)
+			{
+				FString Model, Prefab, Error;
+				if (!SourceName.IsEmpty() && AOKSceneActor::ItemModel(X->Item, Model, Prefab, Error)) FOkModel::TexturePng(UKKCardWorkspace::LibraryRoot(), Model, SourceName, Png);
+			}
+			const FString Out = MaterialExportDir(ItemId) / FPaths::MakeValidFileName(Material + TEXT("_") + Property) + TEXT(".png");
+			if (Png.IsEmpty() || !FFileHelper::SaveArrayToFile(Png, *Out)) { SetStatus(TEXT("匯出貼圖失敗：") + Property); return; }
+			SetStatus(TEXT("匯出 ") + Out);
+		};
+		Properties->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("載入")), Load, 0.f, 16.f, false, 9.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("清空")), Clear, 0.f, 16.f, false, 9.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("預設")), Back, 0.f, 16.f, false, 9.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("匯出")), Export, 0.f, 16.f, false, 9.f)]
+		];
+		// Scale X / Y and offset X / Y, from the material's own _ST when it has one.
+		FLinearColor SourceST(1.f, 1.f, 0.f, 0.f);
+		for (const TPair<FString, FLinearColor>& C : Colors) if (C.Key == Property + TEXT("_ST")) SourceST = C.Value;
+		TSharedRef<SHorizontalBox> ST = SNew(SHorizontalBox);
+		static const TCHAR* STNames[] = { TEXT("縮X"), TEXT("縮Y"), TEXT("移X"), TEXT("移Y") };
+		for (int32 C = 0; C < 4; ++C)
+			ST->AddSlot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)
 			[
 				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(0.42f)[OKStudioStyle::Label(FText::FromString(T.Key), 10.f)]
-				+ SHorizontalBox::Slot().FillWidth(0.58f)[OKStudioStyle::Label(FText::FromString(T.Value.IsEmpty() ? TEXT("（無貼圖）") : T.Value), 9.f, TextHint())]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.f, 0.f, 2.f, 0.f)[OKStudioStyle::Label(FText::FromString(STNames[C]), 9.f, TextHint())]
+				+ SHorizontalBox::Slot().FillWidth(1.f)[SNew(SBox).HeightOverride(16.f)[Spin([FindEdit, Material, Property, SourceST, C] { const FOKSceneMaterialEdit* E = FindEdit(EOKSceneMaterialEditKind::TextureST, Material, Property); return (E ? E->Value : SourceST).Component(C); },
+					[this, Put, FindEdit, Material, Property, SourceST, C](float V)
+					{
+						const FOKSceneMaterialEdit* Old = FindEdit(EOKSceneMaterialEditKind::TextureST, Material, Property);
+						FLinearColor Now = Old ? Old->Value : SourceST;
+						Now.Component(C) = V;
+						if (FOKSceneMaterialEdit* E = Put(EOKSceneMaterialEditKind::TextureST, Material, Property)) E->Value = Now;
+						Changed();
+					}, -100.f, 100.f, 0.01f)]]
 			];
+		Properties->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 3.f)[ST];
+	}
 	const TSharedRef<SVerticalBox> Right = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 2.f)
 			[TextBox([this] { return MaterialFilter; }, [this](const FString& V) { MaterialFilter = V.TrimStartAndEnd(); RebuildFloat(TEXT("material")); }, TEXT("篩選屬性"))]
@@ -1173,6 +1406,111 @@ TSharedRef<SWidget> SOKStudioPanel::BuildMaterialEditor()
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("● 是改過的屬性；改動隨場景儲存。")), 9.f, TextHint())]
 			+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("此材質全部預設")), [Reset] { Reset(FString()); }, 0.f, 20.f, false, 10.f)]
 		];
+}
+
+FString SOKStudioPanel::MaterialExportDir(int32 ItemId) const
+{
+	const FOKSceneObject* X = Game.IsValid() ? Game->Document->Find(ItemId) : nullptr;
+	const FString Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("OKStudio/MaterialExport")
+		/ FPaths::MakeValidFileName(FString::Printf(TEXT("%d_%s"), ItemId, X ? *X->Name : TEXT(""))));
+	IFileManager::Get().MakeDirectory(*Dir, true);
+	return Dir;
+}
+
+bool SOKStudioPanel::ExportMaterial(const FString& What)
+{
+	FOKSceneObject* O = Game.IsValid() ? Game->Document->Find(Game->SelectedId) : nullptr;
+	AKKPreviewActor* Shown = O && O->Kind == EOKSceneObjectKind::Item && Game->SceneActor ? Game->SceneActor->PreviewOf(O->Id) : nullptr;
+	const int32 Parts = Shown ? Shown->Session.PartCount() : 0;
+	if (Parts <= 0) { SetStatus(TEXT("匯出：先選取一個已載入的道具")); return false; }
+	const FString Dir = MaterialExportDir(O->Id);
+	auto PartName = [](const OkMeshView& M, int32 I) { return M.name && *M.name ? FPaths::MakeValidFileName(UTF8_TO_TCHAR(M.name)) : FString::Printf(TEXT("part%d"), I); };
+	int32 Files = 0;
+	if (What == TEXT("uv"))
+	{
+		// The picked renderer's triangles in UV space, black lines on white (1024 square, v up).
+		OkMeshView M{};
+		const int32 I = FMath::Clamp(MaterialPart, 0, Parts - 1);
+		if (!Shown->Session.PartAt(I, M) || !M.uvs || !M.indices) { SetStatus(TEXT("匯出 UV：這個 renderer 沒有 UV")); return false; }
+		const int32 Size = 1024;
+		TArray<FColor> Pixels;
+		Pixels.Init(FColor::White, Size * Size);
+		auto At = [&](uint32 V) { return FIntPoint(FMath::Clamp(int32(M.uvs[V * 2] * Size), 0, Size - 1), FMath::Clamp(int32((1.f - M.uvs[V * 2 + 1]) * Size), 0, Size - 1)); };
+		auto Line = [&](FIntPoint A, const FIntPoint B)
+		{
+			const int32 DX = FMath::Abs(B.X - A.X), DY = -FMath::Abs(B.Y - A.Y), SX = A.X < B.X ? 1 : -1, SY = A.Y < B.Y ? 1 : -1;
+			for (int32 Err = DX + DY;;)
+			{
+				Pixels[A.Y * Size + A.X] = FColor::Black;
+				if (A == B) break;
+				const int32 E2 = 2 * Err;
+				if (E2 >= DY) { Err += DY; A.X += SX; }
+				if (E2 <= DX) { Err += DX; A.Y += SY; }
+			}
+		};
+		for (int32 T = 0; T + 2 < M.n_idx; T += 3)
+		{
+			const uint32 A = M.indices[T], B = M.indices[T + 1], C = M.indices[T + 2];
+			if (int32(FMath::Max3(A, B, C)) >= M.n_verts) continue;
+			Line(At(A), At(B)); Line(At(B), At(C)); Line(At(C), At(A));
+		}
+		TArray64<uint8> Png;
+		FImageUtils::PNGCompressImageArray(Size, Size, Pixels, Png);
+		const FString Out = Dir / PartName(M, I) + TEXT("_uv.png");
+		if (FFileHelper::SaveArrayToFile(Png, *Out)) ++Files;
+	}
+	else if (What == TEXT("obj"))
+	{
+		// Every renderer as one object (Unity's left-handed space mirrored on X, so the faces turn back).
+		FString Obj = FString::Printf(TEXT("# OK Studio item %d %s\n"), O->Id, *O->Name);
+		int32 Base = 1;
+		for (int32 I = 0; I < Parts; ++I)
+		{
+			OkMeshView M{};
+			if (!Shown->Session.PartAt(I, M) || !M.positions || !M.indices || M.n_verts <= 0) continue;
+			Obj += FString::Printf(TEXT("o %s\n"), *PartName(M, I));
+			for (int32 V = 0; V < M.n_verts; ++V) Obj += FString::Printf(TEXT("v %.6f %.6f %.6f\n"), -M.positions[V * 3], M.positions[V * 3 + 1], M.positions[V * 3 + 2]);
+			if (M.uvs) for (int32 V = 0; V < M.n_verts; ++V) Obj += FString::Printf(TEXT("vt %.6f %.6f\n"), M.uvs[V * 2], M.uvs[V * 2 + 1]);
+			for (int32 T = 0; T + 2 < M.n_idx; T += 3)
+			{
+				const int32 A = int32(M.indices[T]) + Base, B = int32(M.indices[T + 2]) + Base, C = int32(M.indices[T + 1]) + Base;
+				Obj += M.uvs ? FString::Printf(TEXT("f %d/%d %d/%d %d/%d\n"), A, A, B, B, C, C) : FString::Printf(TEXT("f %d %d %d\n"), A, B, C);
+			}
+			Base += M.n_verts;
+		}
+		const FString Out = Dir / FPaths::MakeValidFileName(O->Name.IsEmpty() ? TEXT("item") : O->Name) + TEXT(".obj");
+		if (FFileHelper::SaveStringToFile(Obj, *Out, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)) ++Files;
+	}
+	else if (What == TEXT("textures"))
+	{
+		// What each renderer shows (its main texture as built) and the material's named textures from the library.
+		FString Model, Prefab, Error;
+		const bool bModel = AOKSceneActor::ItemModel(O->Item, Model, Prefab, Error);
+		TSet<FString> Named;
+		for (int32 I = 0; I < Parts; ++I)
+		{
+			OkMeshView M{};
+			if (!Shown->Session.PartAt(I, M)) continue;
+			if (M.png && M.png_len > 0 && FFileHelper::SaveArrayToFile(TArrayView<const uint8>(M.png, M.png_len), *(Dir / PartName(M, I) + TEXT("_main.png")))) ++Files;
+			TSharedPtr<FJsonObject> Root;
+			const TSharedPtr<FJsonObject>* Mat = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* Slots = nullptr;
+			if (!bModel || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Shown->Session.MaterialMetadataJson(I)), Root) || !Root || !Root->TryGetObjectField(TEXT("material"), Mat) || !Mat || !(*Mat)->TryGetArrayField(TEXT("tex_slots"), Slots)) continue;
+			for (const TSharedPtr<FJsonValue>& S : *Slots)
+			{
+				const TArray<TSharedPtr<FJsonValue>>* Pair = nullptr;
+				if (!S->TryGetArray(Pair) || Pair->Num() < 2) continue;
+				const FString Texture = (*Pair)[1]->AsString();
+				TArray<uint8> Png;
+				if (Texture.IsEmpty() || Named.Contains(Texture) || !FOkModel::TexturePng(UKKCardWorkspace::LibraryRoot(), Model, Texture, Png)) continue;
+				Named.Add(Texture);
+				if (FFileHelper::SaveArrayToFile(Png, *(Dir / FPaths::MakeValidFileName(Texture) + TEXT(".png")))) ++Files;
+			}
+		}
+	}
+	else { SetStatus(TEXT("匯出：參數是 uv、obj 或 textures")); return false; }
+	SetStatus(FString::Printf(TEXT("匯出 %d 個檔案到 %s"), Files, *Dir));
+	return Files > 0;
 }
 
 TSharedRef<SWidget> SOKStudioPanel::BuildAnimController()
@@ -1330,6 +1668,36 @@ TSharedRef<SWidget> SOKStudioPanel::BuildResources()
 	}
 	const int32 Count = Lines.Num();
 	if (Lines.IsEmpty()) Lines.Add(TEXT("沒有缺少的資源。"));
+	// Each character (HS2Studio6 资源检查): its card's kind, whether it shows, and the mods an original card names (what
+	// to install before 重新讀取角色). An OK card carries its own parts.
+	if (Game.IsValid())
+	{
+		const FString Project = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+		bool bHeading = false;
+		for (const FOKSceneObject& O : Game->Document->Objects)
+		{
+			if (O.Kind != EOKSceneObjectKind::Character) continue;
+			if (!bHeading) { Lines.Add(TEXT("── 角色 ──")); bHeading = true; }
+			const FString Card = FPaths::IsRelative(O.Character.Card) ? Project / O.Character.Card : O.Character.Card;
+			const bool bShown = Game->SceneActor && Game->SceneActor->PreviewOf(O.Id);
+			FString Kind;
+			TArray<FString> Mods;
+			if (!FPaths::FileExists(Card)) Kind = TEXT("缺卡片");
+			else if (!UKKCardWorkspace::PortableSourcePath(Card).IsEmpty()) Kind = TEXT("OK 卡（自帶資源）");
+			else
+			{
+				Kind = TEXT("原作卡");
+				FKKCharacterFile File;
+				FString Error;
+				if (UKKCardReader::LoadFromFile(Card, File, Error)) { for (const FKKResolveInfo& R : File.Resolves) if (!R.ModID.IsEmpty()) Mods.AddUnique(R.ModID); }
+				else Kind += TEXT("，讀不出：") + Error;
+			}
+			Lines.Add(FString::Printf(TEXT("#%d %s：%s，%s%s"), O.Id, *O.Name, *Kind, bShown ? TEXT("已顯示") : TEXT("未顯示"),
+				Mods.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("，卡片指名 %d 個 mod"), Mods.Num())));
+			Mods.Sort();
+			for (const FString& M : Mods) Lines.Add(FString::Printf(TEXT("#%d 　　%s"), O.Id, *M));
+		}
+	}
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()[OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("%d 項缺件（點一行選取物件）"), Count)), 10.f, TextSoft())]
 		+ SVerticalBox::Slot().FillHeight(1.f).Padding(0.f, 3.f)[TextList(Lines, [this, Lines](int32 I) { const int32 Id = LineId(Lines[I]); if (Id > 0 && Game.IsValid()) { Game->Select(Id); LocateSelection(); } }, 260.f)]
@@ -1337,7 +1705,8 @@ TSharedRef<SWidget> SOKStudioPanel::BuildResources()
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 3.f, 0.f)[Button(FText::FromString(TEXT("複製清單")), [Lines] { FPlatformApplicationMisc::ClipboardCopy(*FString::Join(Lines, TEXT("\n"))); }, 0.f, 20.f)]
-			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("重新檢查")), [this] { DeferFloat(TEXT("resources")); }, 0.f, 20.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 3.f, 0.f)[Button(FText::FromString(TEXT("重新檢查")), [this] { DeferFloat(TEXT("resources")); }, 0.f, 20.f)]
+			+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("重新讀取角色")), Cmd(TEXT("scene.reloadcharacters")), 0.f, 20.f)]
 		];
 }
 
@@ -1560,6 +1929,19 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSettings()
 	{
 	case 0:
 		Setting(TEXT("介面縮放"), TEXT("整個工作室介面的大小（乘在 HS2Studio6 的縮放上）；立即生效"), Number(&S.UiScale, 0.5f, 2.f, 0.05f), [] { FOKStudioSettings::Get().UiScale = 1.f; });
+		// HS2Studio6 游戏设置: put on the engine at once and whenever the studio starts.
+		{
+			auto Apply = [] { FOKStudioSettings::Get().Save(); FOKStudioSettings::Get().ApplyGame(false); };
+			static const TCHAR* VSyncNames[] = { TEXT("照引擎"), TEXT("關"), TEXT("開") };
+			Setting(TEXT("主音量"), TEXT("所有聲音（BGM、語音、音效）的音量 0～1"), Spin([] { return FOKStudioSettings::Get().MasterVolume; }, [Apply](float V) { FOKStudioSettings::Get().MasterVolume = FMath::Clamp(V, 0.f, 1.f); Apply(); }, 0.f, 1.f, 0.01f),
+				[Apply] { FOKStudioSettings::Get().MasterVolume = 1.f; Apply(); });
+			Setting(TEXT("背景時繼續執行"), TEXT("視窗不在前景時照常更新畫面與聲音（關掉就閒置省資源）"), CheckBox(TEXT("開"), [] { return FOKStudioSettings::Get().bRunInBackground; }, [Apply](bool B) { FOKStudioSettings::Get().bRunInBackground = B; Apply(); }),
+				[Apply] { FOKStudioSettings::Get().bRunInBackground = true; Apply(); });
+			Setting(TEXT("垂直同步"), TEXT("照引擎＝不改；開＝跟著螢幕更新率"), Button(TAttribute<FText>::CreateLambda([] { return FText::FromString(VSyncNames[FMath::Clamp(FOKStudioSettings::Get().VSync + 1, 0, 2)]); }),
+				[Apply] { FOKStudioSettings::Get().VSync = (FMath::Clamp(FOKStudioSettings::Get().VSync + 1, 0, 2) + 1) % 3 - 1; Apply(); }, 0.f, 18.f, false, 10.f), [Apply] { FOKStudioSettings::Get().VSync = -1; Apply(); });
+			Setting(TEXT("幀率上限"), TEXT("-1 不改（引擎或啟動器的設定），0 不限制，其他是每秒最多幾幀"), Spin([] { return float(FOKStudioSettings::Get().MaxFps); }, [Apply](float V) { FOKStudioSettings::Get().MaxFps = FMath::Clamp(FMath::RoundToInt(V), -1, 1000); Apply(); }, -1.f, 1000.f, 1.f),
+				[Apply] { FOKStudioSettings::Get().MaxFps = -1; Apply(); });
+		}
 		Setting(TEXT("場景檔資料夾"), TEXT("場景瀏覽器的預設資料夾（唯讀）"), OKStudioStyle::Label(FText::FromString(UOKStudioGame::SceneDirectory()), 9.f, TextHint()), nullptr);
 		Setting(TEXT("全部恢復預設"), TEXT("所有設定與快捷鍵回到預設（收藏與最近使用保留）"), Button(FText::FromString(TEXT("恢復預設")), [this] { FOKStudioSettings::Get().Reset(); DeferFloat(TEXT("settings")); }, 0.f, 18.f), nullptr);
 		break;
@@ -1570,6 +1952,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSettings()
 		Setting(TEXT("飛行速度 cm/秒"), TEXT("自由飛行時 W A S D Q E 的速度"), Number(&S.FlySpeed, 10.f, 3000.f, 10.f), [] { FOKStudioSettings::Get().FlySpeed = 300.f; });
 		Setting(TEXT("自由飛行"), TEXT("開啟後按住右鍵是轉鏡頭，W A S D Q E 移動"), CheckBox(TEXT("開"), [] { return FOKStudioSettings::Get().bFlyMode; }, [](bool B) { FOKStudioSettings::Get().bFlyMode = B; FOKStudioSettings::Get().Save(); }), [] { FOKStudioSettings::Get().bFlyMode = false; });
 		Setting(TEXT("Gizmo 大小"), TEXT("移動、旋轉、縮放把手的螢幕大小倍率"), Number(&S.GizmoScale, 0.3f, 4.f, 0.05f), [] { FOKStudioSettings::Get().GizmoScale = 1.f; });
+		Setting(TEXT("控制點大小"), TEXT("畫面上 FK 骨點、IK 點的大小倍率（也是點選範圍）"), Number(&S.PointScale, 0.3f, 4.f, 0.05f), [] { FOKStudioSettings::Get().PointScale = 1.f; });
 		Setting(TEXT("吸附：移動 cm"), TEXT("吸附開啟或按住 Ctrl 時，移動的步進"), Number(&S.SnapMove, 0.1f, 1000.f, 0.5f), [] { FOKStudioSettings::Get().SnapMove = 10.f; });
 		Setting(TEXT("吸附：旋轉 度"), TEXT("吸附時旋轉的步進"), Number(&S.SnapRotate, 0.5f, 90.f, 0.5f), [] { FOKStudioSettings::Get().SnapRotate = 15.f; });
 		Setting(TEXT("吸附：縮放"), TEXT("吸附時縮放的步進"), Number(&S.SnapScale, 0.01f, 1.f, 0.01f), [] { FOKStudioSettings::Get().SnapScale = 0.1f; });
@@ -1581,25 +1964,34 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSettings()
 		break;
 	case 3:
 	{
-		Body->AddSlot().AutoHeight()[OKStudioStyle::Label(FText::FromString(TEXT("角色卡瀏覽器的資料夾（Content/CharacterCards 與遊戲的 UserData/chara 一定會列）")), 10.f, TextSoft())];
-		for (int32 I = 0; I < S.CardRoots.Num(); ++I)
-			Body->AddSlot().AutoHeight().Padding(0.f, 1.f)
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(S.CardRoots[I]), 10.f)]
-				+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("移除")), [this, I] { FOKStudioSettings& X = FOKStudioSettings::Get(); if (X.CardRoots.IsValidIndex(I)) X.CardRoots.RemoveAt(I); X.Save(); DeferFloat(TEXT("settings")); }, 40.f, 18.f)]
-			];
-		Body->AddSlot().AutoHeight().Padding(0.f, 4.f)
-			[SNew(SBox).HeightOverride(18.f)[SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("輸入資料夾路徑後按 Enter 加入")))
-				.OnTextCommitted_Lambda([this](const FText& T, ETextCommit::Type C)
-				{
-					const FString Dir = T.ToString().TrimStartAndEnd().TrimQuotes();
-					if (C != ETextCommit::OnEnter || Dir.IsEmpty()) return;
-					if (!FPaths::DirectoryExists(Dir)) { SetStatus(TEXT("沒有這個資料夾：") + Dir); return; }
-					FOKStudioSettings::Get().CardRoots.AddUnique(Dir);
-					FOKStudioSettings::Get().Save();
-					DeferFloat(TEXT("settings"));
-				})]];
+		// One list per kind of resource (HS2Studio6 资源目录): the folders the browser lists besides its fixed ones.
+		auto Roots = [this, &Body, &S](const TCHAR* Title, TArray<FString> FOKStudioSettings::* List)
+		{
+			Body->AddSlot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)[OKStudioStyle::Label(FText::FromString(Title), 10.f, TextSoft())];
+			for (int32 I = 0; I < (S.*List).Num(); ++I)
+				Body->AddSlot().AutoHeight().Padding(0.f, 1.f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString((S.*List)[I]), 10.f)]
+					+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("移除")), [this, I, List] { FOKStudioSettings& X = FOKStudioSettings::Get(); if ((X.*List).IsValidIndex(I)) (X.*List).RemoveAt(I); X.Save(); DeferFloat(TEXT("settings")); }, 40.f, 18.f)]
+				];
+			Body->AddSlot().AutoHeight().Padding(0.f, 2.f)
+				[SNew(SBox).HeightOverride(18.f)[SNew(SEditableTextBox).Style(&TextBoxStyle()).HintText(FText::FromString(TEXT("輸入資料夾路徑後按 Enter 加入")))
+					.OnTextCommitted_Lambda([this, List](const FText& T, ETextCommit::Type C)
+					{
+						const FString Dir = T.ToString().TrimStartAndEnd().TrimQuotes();
+						if (C != ETextCommit::OnEnter || Dir.IsEmpty()) return;
+						if (!FPaths::DirectoryExists(Dir)) { SetStatus(TEXT("沒有這個資料夾：") + Dir); return; }
+						(FOKStudioSettings::Get().*List).AddUnique(Dir);
+						FOKStudioSettings::Get().Save();
+						DeferFloat(TEXT("settings"));
+					})]];
+		};
+		Roots(TEXT("角色卡瀏覽器（Content/CharacterCards 與遊戲的 UserData/chara 一定會列）"), &FOKStudioSettings::CardRoots);
+		Roots(TEXT("外部音源 .ogg／.wav（UserData/audio 一定會列）"), &FOKStudioSettings::AudioRoots);
+		Roots(TEXT("姿勢庫 .dat（UserData/Studio/pose 一定會列；存姿勢仍存到那裡）"), &FOKStudioSettings::PoseRoots);
+		Roots(TEXT("背景圖 .png（基礎庫與 UserData/Studio/bg 一定會列）"), &FOKStudioSettings::BgRoots);
+		Roots(TEXT("前景框 .png（基礎庫與 UserData/Studio/frame 一定會列）"), &FOKStudioSettings::FrameRoots);
 		break;
 	}
 	case 4:

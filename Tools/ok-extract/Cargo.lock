@@ -547,8 +547,6 @@ dependencies = [
 [[package]]
 name = "fsbex"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "362e570e47b98ed9966c238a72cb0b64120f9dc6d44373c35b27ae2223ca7dcc"
 dependencies = [
  "bilge",
  "lewton",

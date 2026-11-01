@@ -14,6 +14,7 @@
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Containers/Ticker.h"
+#include "SceneViewExtension.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
@@ -216,14 +217,57 @@ UOKStudioGame* UOKStudioGame::Start(UWorld* World, const FString& InFile, FStrin
 	Game->ResetHistory();
 	Game->bDirty = false;
 	Game->LastBackupSeconds = FPlatformTime::Seconds();
+	FOKStudioSettings::Get().ApplyGame(true);
 	OKStudioControl::Start();
 	return Game;
+}
+
+namespace
+{
+	/** A scene camera's far plane in perspective (Studio's camera Far, cm; 0: none). UE's perspective projection has no far
+	 *  plane, so the studio's own view extension turns the view's projection into one with this far plane. It
+	 *  is set only by the studio's viewer camera, and cleared when the studio stops: other game modes never see it. */
+	float GOKStudioPerspectiveFar = 0.f;
+	/** Where the studio's view is: only views from there (the viewport, its screenshots and captures) get the far plane,
+	 *  not mirror or screen-item captures, which look from elsewhere. */
+	FVector GOKStudioFarOrigin = FVector::ZeroVector;
+
+	class FOKStudioFarPlaneExtension : public FSceneViewExtensionBase
+	{
+	public:
+		FOKStudioFarPlaneExtension(const FAutoRegister& AutoRegister) : FSceneViewExtensionBase(AutoRegister) {}
+		virtual void SetupView(FSceneViewFamily&, FSceneView& View) override
+		{
+			const float Far = GOKStudioPerspectiveFar;
+			if (Far <= 0.f || !View.ViewMatrices.GetViewOrigin().Equals(GOKStudioFarOrigin, 1.0)) return;
+			// The projection the view was made with (its view matrices are not complete yet here).
+			FMatrix M = View.SceneViewInitOptions.ProjectionMatrix;
+			// Only UE's infinite reversed-Z perspective ([2][2] 0, [3][2] the near plane); orthographic views keep theirs.
+			const double Near = M.M[3][2];
+			if (M.M[3][3] != 0.0 || M.M[2][2] != 0.0 || Near <= 0.0 || Far <= Near) return;
+			// FReversedZPerspectiveMatrix with MinZ = Near, MaxZ = Far: depth 1 at the near plane, 0 at the far one.
+			M.M[2][2] = Near / (Near - Far);
+			M.M[3][2] = -Far * Near / (Near - Far);
+			View.UpdateProjectionMatrix(M);
+		}
+	protected:
+		virtual bool IsActiveThisFrame_Internal(const FSceneViewExtensionContext&) const override { return GOKStudioPerspectiveFar > 0.f; }
+	};
+
+	void OKStudioSetPerspectiveFar(float Far)
+	{
+		static TSharedPtr<FOKStudioFarPlaneExtension, ESPMode::ThreadSafe> Extension;
+		if (Far > 0.f && !Extension.IsValid()) Extension = FSceneViewExtensions::NewExtension<FOKStudioFarPlaneExtension>();
+		GOKStudioPerspectiveFar = Far;
+	}
 }
 
 void UOKStudioViewCamera::GetCameraView(float DeltaTime, FMinimalViewInfo& DesiredView)
 {
 	Super::GetCameraView(DeltaTime, DesiredView);
 	if (NearClip > 0.f) DesiredView.PerspectiveNearClipPlane = NearClip;
+	GOKStudioFarOrigin = DesiredView.Location;
+	OKStudioSetPerspectiveFar(bOrtho ? 0.f : FarClip);
 	if (bOrtho)
 	{
 		// The ortho box is centred on the camera: things behind it would draw, so the near plane sits at the camera.
@@ -332,6 +376,7 @@ void UOKStudioGame::Stop()
 	SceneAudioPcm.Reset();
 	LoadedSoundFile.Reset();
 	OKStudioControl::Stop();
+	OKStudioSetPerspectiveFar(0.f);
 	if (SceneActor && SceneActor->GetWorld())
 	{
 		APlayerController* PC = SceneActor->GetWorld()->GetFirstPlayerController();
@@ -576,6 +621,37 @@ namespace OKStudioGameInternal
 		Out = Mesh->GetBoneTransformByName(*Bone, EBoneSpaces::WorldSpace);
 		return true;
 	}
+	FQuat UnityQuatFromEuler(const FVector& E)
+	{
+		const FQuat Qx(FVector(1, 0, 0), FMath::DegreesToRadians(E.X));
+		const FQuat Qy(FVector(0, 1, 0), FMath::DegreesToRadians(E.Y));
+		const FQuat Qz(FVector(0, 0, 1), FMath::DegreesToRadians(E.Z));
+		return Qy * Qx * Qz;
+	}
+	FVector UnityEulerFromQuat(const FQuat& In)
+	{
+		const FQuat Q = In.GetNormalized();
+		const double SinX = FMath::Clamp(2.0 * (Q.W * Q.X - Q.Y * Q.Z), -1.0, 1.0);
+		const double X = FMath::Asin(SinX);
+		const double Y = FMath::Atan2(2.0 * (Q.W * Q.Y + Q.X * Q.Z), 1.0 - 2.0 * (Q.X * Q.X + Q.Y * Q.Y));
+		const double Z = FMath::Atan2(2.0 * (Q.W * Q.Z + Q.X * Q.Y), 1.0 - 2.0 * (Q.X * Q.X + Q.Z * Q.Z));
+		return FVector(FMath::RadiansToDegrees(X), FMath::RadiansToDegrees(Y), FMath::RadiansToDegrees(Z));
+	}
+	bool IkEffectorEuler(const AKKPreviewActor* Actor, int32 Effector, FVector& OutEuler)
+	{
+		static const TCHAR* Bones[4] = { TEXT("cf_j_hand_L"), TEXT("cf_j_hand_R"), TEXT("cf_j_leg03_L"), TEXT("cf_j_leg03_R") };
+		float M[16];
+		if (!Actor || !IkEffectorTurns(Effector) || !Actor->Session.BoneWorldMatrix(Bones[Effector - 5], M)) return false;
+		// Row-major, translation in the last column: the rotation's columns are the bone's axes (scale removed).
+		FMatrix R = FMatrix::Identity;
+		for (int32 Col = 0; Col < 3; ++Col)
+		{
+			const FVector Axis = FVector(M[Col], M[4 + Col], M[8 + Col]).GetSafeNormal();
+			R.M[Col][0] = Axis.X; R.M[Col][1] = Axis.Y; R.M[Col][2] = Axis.Z;
+		}
+		OutEuler = UnityEulerFromQuat(FQuat(R));
+		return true;
+	}
 	/** Unity local axes X, Y, Z as UE local axes (the converter maps rotations by R_ue = B R_unity B, B a proper rotation). */
 	const FVector UnityAxesInUe[3] = { FVector(-1, 0, 0), FVector(0, 0, 1), FVector(0, 1, 0) };
 }
@@ -624,7 +700,10 @@ namespace
 		if (F.bIk) World = FTransform(IkWorld);
 		if (!F.bBone)
 			for (int32 K = 0; K < 3; ++K) F.Axes[K] = G.bLocalAxes && !F.bIk ? ObjectWorld.GetRotation().RotateVector(GuideAxes[K]).GetSafeNormal() : GuideAxes[K];
-		F.Mode = F.bBone ? 1 : (F.bIk ? 0 : G.GuideMode);
+		// A hand or foot target that keeps a rotation turns in rotate mode; other IK targets only move.
+		const FOKSceneIkTarget* IkTarget = F.bIk ? Object->Character.Ik.FindByPredicate([&G](const FOKSceneIkTarget& T) { return T.Effector == G.GuideIk; }) : nullptr;
+		const bool bIkTurns = IkTarget && IkTarget->bUseRotation && OKStudioGameInternal::IkEffectorTurns(G.GuideIk);
+		F.Mode = F.bBone ? 1 : (F.bIk ? (bIkTurns && G.GuideMode == 1 ? 1 : 0) : G.GuideMode);
 		F.Origin = World.GetLocation();
 		// Panel pixels per 10 cm at the pivot, measured sideways to the camera.
 		FVector2D Side;
@@ -820,6 +899,21 @@ bool UOKStudioGame::DragGuide(const FVector2D& Delta, bool bCtrl)
 		const AKKPreviewActor* P = SceneActor->PreviewOf(SelectedId);
 		const FTransform* Start = DragStart.Find(-1);
 		if (!T || !P || !Start) return false;
+		if (F.Mode == 1)
+		{
+			// Turn the hand / foot about the world axis, in the character's Unity space (the target's Euler space).
+			const float Total = float(Snapped(DragTotal.X * 0.5, S.SnapRotate, bSnapNow));
+			const float Step = Total - DragBoneApplied;
+			DragBoneApplied = Total;
+			GuideReadout = FString::Printf(TEXT("IK 旋轉 %s %+.1f°"), AxisNames[Axis], Total);
+			if (FMath::IsNearlyZero(Step)) return true;
+			const FVector Local = P->GetActorTransform().InverseTransformVectorNoScale(F.Axes[Axis]);
+			const FVector UnityAxis(-Local.X, Local.Z, Local.Y);
+			const FQuat Turn(UnityAxis.GetSafeNormal(), FMath::DegreesToRadians(Step));
+			T->Euler = OKStudioGameInternal::UnityEulerFromQuat(Turn * OKStudioGameInternal::UnityQuatFromEuler(T->Euler));
+			Document->NotifyChanged();
+			return true;
+		}
 		const double Cm = Snapped(AlongAxis(F.PerCm[Axis], DragTotal), S.SnapMove, bSnapNow);
 		T->Position = Start->GetLocation() + P->GetActorTransform().InverseTransformVector(F.Axes[Axis] * Cm);
 		GuideReadout = FString::Printf(TEXT("IK 移動 %s %+.1f cm"), AxisNames[Axis], Cm);
@@ -969,8 +1063,11 @@ void UOKStudioGame::Pan(float Right, float Up)
 void UOKStudioGame::Zoom(float Steps)
 {
 	if (bLockActiveCamera && Document && Document->ActiveCamera >= 0) return;
-	Distance = FMath::Clamp(Distance * FMath::Pow(0.88f, Steps * FOKStudioSettings::Get().ZoomSpeed), 20.f, 5000.f);
+	const float Factor = FMath::Pow(0.88f, Steps * FOKStudioSettings::Get().ZoomSpeed);
+	Distance = FMath::Clamp(Distance * Factor, 20.f, 5000.f);
 	Document->ActiveCamera = -1;
+	// An orthographic free view zooms by its width (the distance alone changes nothing on screen).
+	if (Document->FreeView.bOrtho) { Document->FreeView.OrthoWidth = FMath::Clamp(Document->FreeView.OrthoWidth * Factor, 1.f, 100000.f); }
 }
 
 void UOKStudioGame::SetStoryMode(bool bOn)
@@ -995,12 +1092,14 @@ void UOKStudioGame::UpdateViewer()
 	UOKStudioViewCamera* Near = Cast<UOKStudioViewCamera>(ViewerCamera);
 	const FOKSceneObject* ActiveObject = Document ? Document->Find(Document->ActiveCamera) : nullptr;
 	const bool bSceneCamera = ActiveObject && ActiveObject->Kind == EOKSceneObjectKind::Camera;
+	// A scene camera's lens, or the free view's own (saved in the scene).
+	const FOKSceneCamera* Lens = bSceneCamera ? &ActiveObject->Camera : (Document ? &Document->FreeView : nullptr);
 	if (Near)
 	{
-		Near->NearClip = bSceneCamera ? ActiveObject->Camera.Near : 0.f;
-		Near->bOrtho = bSceneCamera && ActiveObject->Camera.bOrtho;
-		Near->OrthoViewWidth = bSceneCamera ? ActiveObject->Camera.OrthoWidth : 400.f;
-		Near->FarClip = bSceneCamera ? ActiveObject->Camera.Far : 0.f;
+		Near->NearClip = Lens ? Lens->Near : 0.f;
+		Near->bOrtho = Lens && Lens->bOrtho;
+		Near->OrthoViewWidth = Lens ? Lens->OrthoWidth : 400.f;
+		Near->FarClip = Lens ? Lens->Far : 0.f;
 	}
 	if (const UCameraComponent* Active = SceneActor ? SceneActor->ActiveCamera() : nullptr)
 	{
@@ -1022,7 +1121,7 @@ void UOKStudioGame::UpdateViewer()
 	}
 	const FRotator R(Pitch, Yaw, 0.f);
 	Viewer->SetActorLocationAndRotation(Focus - R.Vector() * Distance, R);
-	ViewerCamera->SetFieldOfView(40.f);
+	ViewerCamera->SetFieldOfView(Lens ? FMath::Clamp(Lens->Fov, 5.f, 170.f) : 40.f);
 	if (SceneActor) SceneActor->PlaceBackground(Viewer->GetActorTransform(), ViewerCamera->FieldOfView);
 }
 
