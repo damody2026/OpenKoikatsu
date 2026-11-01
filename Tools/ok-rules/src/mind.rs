@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn needs_words() {
         let r = Relation { satiety: 30.0, energy: 10.0, social: 10.0, ..Default::default() };
-        assert_eq!(needs_text(&r, 80.0, true), "有點餓、非常累、有點寂寞、最近手頭很緊");
+        assert_eq!(needs_text(&r, 80.0, true), "有點餓（還吃得下，別說吃飽了或撐了）、非常累、有點寂寞、最近手頭很緊");
         // Four lovers already: a +4 for someone else counts 1; a loss is whole; a lover's own gain is whole.
         let g = |stage: &str, delta: f32| favor_gain(&json!({"stage": stage, "favor": 10, "limit": 100, "delta": delta, "lovers": 4}))["delta"].as_f64().unwrap();
         assert_eq!((g("friend", 4.0), g("friend", -4.0), g("lover", 4.0)), (1.0, -4.0, 4.0));
