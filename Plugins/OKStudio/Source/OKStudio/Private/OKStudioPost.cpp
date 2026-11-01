@@ -89,8 +89,9 @@ if (AOOn > 0.5 && !bFar)
 }
 if (ShaftsOn > 0.5)
 {
-	// OK_STUDIO_SHAFTS_DEPTH=show (diagnostic): the depth the shafts read, red where far, green rising to 50 m.
-	if (ShaftsAllFar > 1.5) { float Dc = OK_STENCIL(VUV) > 0.5 ? OK_DEPTH(VUV) : OK_CUSTOM_DEPTH(VUV); return float3(Dc > FarM ? 1.0 : 0.0, saturate(Dc / 50.0), 0.0); }
+	// OK_STUDIO_SHAFTS_DEPTH=show (diagnostic): red where the shafts read far, green the custom depth rising to 50 m, blue
+	// where a blended part wrote it (its draw-order rank).
+	if (ShaftsAllFar > 1.5) { float Dc = OK_STENCIL(VUV) > 0.5 ? OK_DEPTH(VUV) : OK_CUSTOM_DEPTH(VUV); return float3(Dc > FarM ? 1.0 : 0.0, saturate(OK_CUSTOM_DEPTH(VUV) / 50.0), OK_STENCIL(VUV) > 0.5 ? 1.0 : 0.0); }
 	const float2 Sun = float2(0.5, 0.5);
 	const float B1 = 3.0 * 0.0013020834, B2 = 3.0 * 6.0 / 768.0, B3 = 3.0 * 12.0 / 768.0, B4 = 3.0 * 18.0 / 768.0;
 	float Small = (1.0 - 2.5 * B1) * (1.0 - 2.5 * B2);
