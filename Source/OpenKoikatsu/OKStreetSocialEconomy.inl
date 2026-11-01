@@ -481,8 +481,9 @@ void AOKStreetSocialScene::TickMeal(float Dt){
    for(const auto& D:S.Table)if(D.ForHer&&D.Served&&D.Percent>0.f&&S.Manifest.Characters.IsValidIndex(D.Her))if(const auto* I=S.Catalog.Find(D.ItemId)){
     const int32 Index=OKStreetRelationIndex(Candidate,OKStreetStableId(S.Manifest.Characters[D.Her]),S.Manifest.TalkBudget,true);
     if(!Candidate.Relations.IsValidIndex(Index))continue;auto& R=Candidate.Relations[Index];
-    // Full, with it untouched: it goes with him as before (安可's omelette, full after her soup), not into the bin.
-    if(!I->IsDrink()&&R.Satiety>=OKStreetFullSatiety){if(D.Percent>=99.f&&I->Consumable){Candidate.Inventory.Add(D.ItemId);Packed.Add(I->Name);}continue;}
+    // Full, with most of it left: it goes with him as a takeaway (安可's untouched omelette; 優香's curry, two bites in,
+    // "let's pack it"), not into the bin.
+    if(!I->IsDrink()&&R.Satiety>=OKStreetFullSatiety){if(D.Percent>=50.f&&I->Consumable){Candidate.Inventory.Add(D.ItemId);Packed.Add(I->Name);}continue;}
     const float Left=100.f-D.Booked;
     for(const auto& E:I->Effects){float* V=E.Key==TEXT("satiety")?&R.Satiety:E.Key==TEXT("energy")?&R.Energy:E.Key==TEXT("fun")?&R.Fun:E.Key==TEXT("hygiene")?&R.Hygiene:nullptr;
      if(V)*V=FMath::Clamp(*V+E.Value*Left/100.f*(V==&R.Satiety?100.f/SatietyMax(D.Her):1.f),0.f,V==&R.Satiety?OKStreetOverfullSatiety:100.f);}

@@ -1664,7 +1664,11 @@ void AOKStreetSocialScene::JudgeFreeTalk(int32 Character,const FString& Id,const
      const bool Carried=L->Store.Inventory.ContainsByPredicate([&](const FString& Id){const auto* I=L->Catalog.Find(Id);return I&&Matches(Id,*I);});
      if(!Carried&&Weak.IsValid()){const FString Shop=Weak->ShopPlaceHere();const FOKStreetCatalogItem* Sold=nullptr;
       if(!Shop.IsEmpty())for(const auto* I:Weak->ItemsHere(Shop))if(I&&I->Giftable&&Matches(I->Id,*I)){Sold=I;break;}
-      if(Sold){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d gift %s not carried, bought here first"),Character,*Sold->Id);Weak->BuyForGift(Sold->Id);}
+      // Just bought and handed over: "this keyring is for you" after "I'll buy you one" bought a second one (優香 at the
+      // aquarium, ¥32 twice). The one he gave is the one he means.
+      auto JustBought=[&](const FString& Id){for(const TCHAR* Who:{TEXT("|her"),TEXT("|him")})if(const int64* At=L->RecentBought.Find(Id+Who);At&&OKStreetMindNow(*L)-*At<=10)return true;return false;};
+      if(Sold&&JustBought(Sold->Id)){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d gift %s was just bought and given, not bought again"),Character,*Sold->Id);}
+      else if(Sold){UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d gift %s not carried, bought here first"),Character,*Sold->Id);Weak->BuyForGift(Sold->Id);}
       else{L->TellHer.Add(OKMsg(TEXT("ui.economy.gift_not_carried"),{{TEXT("item"),Gift}}));UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d gift %s: he has none and none is sold here"),Character,*Gift);}}
      for(const FString& Item:L->Store.Inventory)if(const auto* Known=L->Catalog.Find(Item);Known&&(Item==Gift||OKStreetNameMatches(Gift,Known->Name))){ // either script: "月饼" for the catalogue's 月餅（單顆）
       UE_LOG(LogTemp,Display,TEXT("Street judge: actor=%d he gives her %s"),Character,*Item);Weak->HandleWorldAct(Character,TEXT("gift"),Item);break;}}}
