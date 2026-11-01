@@ -1062,8 +1062,11 @@ void UOKStudioGame::Pan(float Right, float Up)
 void UOKStudioGame::Zoom(float Steps)
 {
 	if (bLockActiveCamera && Document && Document->ActiveCamera >= 0) return;
-	Distance = FMath::Clamp(Distance * FMath::Pow(0.88f, Steps * FOKStudioSettings::Get().ZoomSpeed), 20.f, 5000.f);
+	const float Factor = FMath::Pow(0.88f, Steps * FOKStudioSettings::Get().ZoomSpeed);
+	Distance = FMath::Clamp(Distance * Factor, 20.f, 5000.f);
 	Document->ActiveCamera = -1;
+	// An orthographic free view zooms by its width (the distance alone changes nothing on screen).
+	if (Document->FreeView.bOrtho) { Document->FreeView.OrthoWidth = FMath::Clamp(Document->FreeView.OrthoWidth * Factor, 1.f, 100000.f); }
 }
 
 void UOKStudioGame::SetStoryMode(bool bOn)
@@ -1088,12 +1091,14 @@ void UOKStudioGame::UpdateViewer()
 	UOKStudioViewCamera* Near = Cast<UOKStudioViewCamera>(ViewerCamera);
 	const FOKSceneObject* ActiveObject = Document ? Document->Find(Document->ActiveCamera) : nullptr;
 	const bool bSceneCamera = ActiveObject && ActiveObject->Kind == EOKSceneObjectKind::Camera;
+	// A scene camera's lens, or the free view's own (saved in the scene).
+	const FOKSceneCamera* Lens = bSceneCamera ? &ActiveObject->Camera : (Document ? &Document->FreeView : nullptr);
 	if (Near)
 	{
-		Near->NearClip = bSceneCamera ? ActiveObject->Camera.Near : 0.f;
-		Near->bOrtho = bSceneCamera && ActiveObject->Camera.bOrtho;
-		Near->OrthoViewWidth = bSceneCamera ? ActiveObject->Camera.OrthoWidth : 400.f;
-		Near->FarClip = bSceneCamera ? ActiveObject->Camera.Far : 0.f;
+		Near->NearClip = Lens ? Lens->Near : 0.f;
+		Near->bOrtho = Lens && Lens->bOrtho;
+		Near->OrthoViewWidth = Lens ? Lens->OrthoWidth : 400.f;
+		Near->FarClip = Lens ? Lens->Far : 0.f;
 	}
 	if (const UCameraComponent* Active = SceneActor ? SceneActor->ActiveCamera() : nullptr)
 	{
@@ -1115,7 +1120,7 @@ void UOKStudioGame::UpdateViewer()
 	}
 	const FRotator R(Pitch, Yaw, 0.f);
 	Viewer->SetActorLocationAndRotation(Focus - R.Vector() * Distance, R);
-	ViewerCamera->SetFieldOfView(40.f);
+	ViewerCamera->SetFieldOfView(Lens ? FMath::Clamp(Lens->Fov, 5.f, 170.f) : 40.f);
 	if (SceneActor) SceneActor->PlaceBackground(Viewer->GetActorTransform(), ViewerCamera->FieldOfView);
 }
 

@@ -348,7 +348,7 @@ public:
 			{
 				Game->ReleaseSceneResources();
 				Game->Document->Objects.Reset(); Game->Document->Tracks.Reset(); Game->Document->Bookmarks.Reset(); Game->Document->NextId = 1; Game->Document->ActiveCamera = -1;
-				Game->Document->Map = -1; Game->Document->Post = FOKScenePost(); Game->Document->Sound = FOKSceneSound(); Game->File.Reset();
+				Game->Document->Map = -1; Game->Document->Post = FOKScenePost(); Game->Document->Sound = FOKSceneSound(); Game->Document->FreeView = FOKSceneCamera(); Game->File.Reset();
 				// The timeline starts over too (the playhead stayed where the last scene was paused).
 				Game->Document->Duration = 10.f; Game->bTimelinePlaying = false; Game->TimelineTime = Game->Document->Playhead = 0.f; Game->LoopStart = Game->LoopEnd = 0.f;
 				SaveAsName = FDateTime::Now().ToString(TEXT("scene_%Y%m%d_%H%M%S")); // not the last scene's name to overwrite
@@ -2457,8 +2457,25 @@ public:
 		{
 			Float(TEXT("視野角度"), [](FOKSceneObject& X) { return X.Camera.Fov; }, [](FOKSceneObject& X, float V) { X.Camera.Fov = V; }, 5.f, 170.f, 1.f);
 			Float(TEXT("近面 cm"), [](FOKSceneObject& X) { return X.Camera.Near; }, [](FOKSceneObject& X, float V) { X.Camera.Near = FMath::Max(V, 0.f); }, 0.f, 500.f, 0.5f);
+			Float(TEXT("遠面 cm（0 無）"), [](FOKSceneObject& X) { return X.Camera.Far; }, [](FOKSceneObject& X, float V) { X.Camera.Far = FMath::Max(V, 0.f); }, 0.f, 1000000.f, 100.f);
 			Check(TEXT("正交"), [](FOKSceneObject& X) { return X.Camera.bOrtho; }, [](FOKSceneObject& X, bool V) { X.Camera.bOrtho = V; });
 			Float(TEXT("正交寬度 cm"), [](FOKSceneObject& X) { return X.Camera.OrthoWidth; }, [](FOKSceneObject& X, float V) { X.Camera.OrthoWidth = FMath::Max(V, 1.f); }, 1.f, 100000.f, 5.f);
+		}
+		// The free view's own lens (HS2Studio6 当前视口镜头), saved with the scene.
+		if (!Active && Game.IsValid())
+		{
+			Label(TEXT("自由視角鏡頭"));
+			auto Lens = [this]() -> FOKSceneCamera& { return Game->Document->FreeView; };
+			auto Number = [this, Lens](const TCHAR* Name, float FOKSceneCamera::*Field, float Min, float Max, float Delta)
+			{
+				Row(Name, Spin([Lens, Field] { return Lens().*Field; }, [this, Lens, Field, Min, Max](float V) { Lens().*Field = FMath::Clamp(V, Min, Max); Changed(); }, Min, Max, Delta));
+			};
+			Number(TEXT("視野角度"), &FOKSceneCamera::Fov, 5.f, 170.f, 1.f);
+			Number(TEXT("近面 cm"), &FOKSceneCamera::Near, 0.f, 500.f, 0.5f);
+			Number(TEXT("遠面 cm（0 無）"), &FOKSceneCamera::Far, 0.f, 1000000.f, 100.f);
+			Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[CheckBox(TEXT("正交"), [Lens] { return Lens().bOrtho; }, [this, Lens](bool B) { Lens().bOrtho = B; Changed(); })];
+			Number(TEXT("正交寬度 cm"), &FOKSceneCamera::OrthoWidth, 1.f, 100000.f, 5.f);
+			Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[Button(FText::FromString(TEXT("鏡頭重設")), [this, Lens] { Lens() = FOKSceneCamera(); Changed(); }, 0.f, 18.f, false, 10.f)];
 		}
 		Label(TEXT("視角"));
 		Buttons({ { TEXT("聚焦所選"), TEXT("camera.focus") }, { TEXT("初始"), TEXT("camera.reset") }, { TEXT("前"), TEXT("camera.front") }, { TEXT("側"), TEXT("camera.side") }, { TEXT("上"), TEXT("camera.top") } });

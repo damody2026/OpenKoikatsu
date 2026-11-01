@@ -148,7 +148,8 @@ void UOKStudioGame::FocusSelection(bool bFace)
 	// Back into the scene's own frame (the orbit focus is in world space, the scene actor sits at the origin).
 	Focus = All.GetCenter();
 	const float Radius = FMath::Max(float(All.GetExtent().Size()), 10.f);
-	Distance = FMath::Clamp(Radius / FMath::Tan(FMath::DegreesToRadians(20.f)) * 1.15f, 20.f, 5000.f);
+	Distance = FMath::Clamp(Radius / FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(Document->FreeView.Fov, 5.f, 170.f) * 0.5f)) * 1.15f, 20.f, 5000.f);
+	if (Document->FreeView.bOrtho) Document->FreeView.OrthoWidth = Radius * 2.3f;
 	Document->ActiveCamera = -1;
 }
 
@@ -200,6 +201,8 @@ bool UOKStudioGame::StoreViewInCamera(int32 Id)
 	const FTransform Parent = Document->ParentFrame(Id) * (SceneActor ? SceneActor->GetActorTransform() : FTransform::Identity);
 	O->Transform = World.GetRelativeTransform(Parent);
 	O->Transform.SetScale3D(FVector::OneVector);
+	// From the free view the camera takes its whole lens (near / far / orthographic too).
+	if (Document->ActiveCamera < 0) O->Camera = Document->FreeView;
 	O->Camera.Fov = Viewer->GetCameraComponent()->FieldOfView;
 	Document->NotifyChanged();
 	return true;

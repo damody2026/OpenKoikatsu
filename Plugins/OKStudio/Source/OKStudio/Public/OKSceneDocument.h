@@ -547,8 +547,7 @@ struct OKSTUDIO_API FOKSceneCamera
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "5", ClampMax = "170"))
 	float Fov = 40.f;
 
-	/** Near clipping plane (cm; <= 0: the engine's). Unreal draws perspective views without a far plane: Far is kept for
-	 *  the scene file and the UI, not applied. */
+	/** Near and far clipping planes (cm; <= 0: the engine's near plane, no far plane). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	float Near = 0.f;
 
@@ -946,6 +945,10 @@ public:
 	/** Camera object the scene is viewed through (-1: the free camera). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
 	int32 ActiveCamera = -1;
+
+	/** The free view's lens (HS2Studio6 当前视口镜头): field of view, near / far planes, orthographic. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
+	FOKSceneCamera FreeView;
 
 	/** Studio map of the scene (catalogue no; -1: none). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scene")
