@@ -417,15 +417,17 @@ bool SOKStudioPanel::MirrorPose(FOKSceneObject& X, int32 Mode)
 	return true;
 }
 
-void SOKStudioPanel::IkFromFk(FOKSceneObject& X)
+void SOKStudioPanel::IkFromFk(FOKSceneObject& X, int32 Part)
 {
 	if (X.Kind != EOKSceneObjectKind::Character || !Game->SceneActor) return;
 	const int32 Id = X.Id;
 	// Where the limbs are under FK alone: the targets go off for a moment, the pose is read, they come back there.
+	// One part: only its targets (all of its effectors when none is on), the others stay.
+	auto Mine = [Part](int32 E) { return Part < 0 || IkPartOf(E) == Part; };
 	TArray<int32> Effectors;
-	for (const FOKSceneIkTarget& T : X.Character.Ik) Effectors.Add(T.Effector);
-	if (Effectors.IsEmpty()) for (int32 E = 0; E < 13; ++E) Effectors.Add(E);
-	X.Character.Ik.Reset();
+	for (const FOKSceneIkTarget& T : X.Character.Ik) if (Mine(T.Effector)) Effectors.Add(T.Effector);
+	if (Effectors.IsEmpty()) for (int32 E = 0; E < 13; ++E) if (Mine(E)) Effectors.Add(E);
+	X.Character.Ik.RemoveAll([&Mine](const FOKSceneIkTarget& T) { return Mine(T.Effector); });
 	Changed();
 	Game->SyncDocumentNow();
 	Game->SceneActor->UpdateLooks(0.f);
@@ -441,14 +443,30 @@ void SOKStudioPanel::IkFromFk(FOKSceneObject& X)
 	}
 	Changed();
 	DeferRebuild();
-	SetStatus(FString::Printf(TEXT("IK←FK：%d 個目標"), Y->Character.Ik.Num()));
+	SetStatus(FString::Printf(TEXT("IK←FK：%d 個目標"), Effectors.Num()));
 }
 
-void SOKStudioPanel::FkFromPose(FOKSceneObject& X)
+void SOKStudioPanel::FkFromPose(FOKSceneObject& Object, int32 Part)
 {
+	FOKSceneObject* Y = &Object;
+	if (Part >= 0 && Game.IsValid() && Game->SceneActor)
+	{
+		// One part starts from the animation: its FK goes for a moment so the pose read is the animation's.
+		const int32 Id = Y->Id;
+		Y->Character.Fk.RemoveAll([Part](const FOKSceneFkBone& B) { return FkPartOf(B.Bone) == Part; });
+		Changed();
+		Game->SyncDocumentNow();
+		Game->SceneActor->UpdateLooks(0.f);
+		Y = Game->Document->Find(Id);
+		if (!Y) return;
+	}
+	FOKSceneObject& X = *Y;
 	int32 Count = 0;
 	for (const FOKStudioFkBone& B : FOKStudioCatalog::Get().FkBones)
-		if (X.Character.FkPartOn(FkPartOf(B.Bone))) { SetFk(X, B.Bone, PosedEuler(X, B.Bone)); ++Count; }
+	{
+		const int32 Of = FkPartOf(B.Bone);
+		if (Part >= 0 ? Of == Part : X.Character.FkPartOn(Of)) { SetFk(X, B.Bone, PosedEuler(X, B.Bone)); ++Count; }
+	}
 	Changed();
 	DeferRebuild();
 	SetStatus(FString::Printf(TEXT("FK←目前姿勢：%d 根骨骼"), Count));
@@ -513,7 +531,15 @@ void SOKStudioPanel::FkPage(FOKSceneObject& O)
 	for (int32 I = 0; I < 7; ++I)
 		PartBox->AddSlot().Padding(1.f)[Button(FText::FromString(Parts[I]), [this, I] { if (FOKSceneObject* X = Obj()) { X->Character.FkPartsOff ^= 1 << I; Changed(); DeferRebuild(); } }, 42.f, 17.f,
 			TAttribute<bool>::CreateLambda([this, I] { return FkPartOn(I); }), 10.f)];
+	PartBox->AddSlot().Padding(1.f)[Button(FText::FromString(TEXT("全部")), [this] { if (FOKSceneObject* X = Obj()) { X->Character.FkPartsOff = X->Character.FkPartsOff ? 0 : 0x7f; Changed(); DeferRebuild(); } }, 42.f, 17.f,
+		TAttribute<bool>::CreateLambda([this] { const FOKSceneObject* X = Obj(); return X && X->Character.FkPartsOff == 0; }), 10.f)];
 	Props->AddSlot().AutoHeight()[PartBox];
+	// 初始化: one part's FK values taken from the animation as it plays now (HS2Studio6 FK 初始化).
+	TSharedRef<SWrapBox> InitBox = SNew(SWrapBox).UseAllottedSize(true);
+	InitBox->AddSlot().Padding(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("初始化")), 10.f)];
+	for (int32 I = 0; I < 7; ++I)
+		InitBox->AddSlot().Padding(1.f)[Button(FText::FromString(Parts[I]), [this, I] { if (FOKSceneObject* X = Obj()) FkFromPose(*X, I); }, 36.f, 16.f, false, 9.f)];
+	Props->AddSlot().AutoHeight()[InitBox];
 	// 復位: one part's FK values go (the part follows the animation again until posed).
 	TSharedRef<SWrapBox> ResetBox = SNew(SWrapBox).UseAllottedSize(true);
 	ResetBox->AddSlot().Padding(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("復位")), 10.f)];
@@ -571,6 +597,12 @@ void SOKStudioPanel::IkPage(FOKSceneObject& O)
 	PartBox->AddSlot().Padding(1.f)[Button(FText::FromString(TEXT("全部")), [this] { if (FOKSceneObject* X = Obj()) { X->Character.IkPartsOff = X->Character.IkPartsOff ? 0 : 0x1f; Changed(); DeferRebuild(); } }, 42.f, 17.f,
 		TAttribute<bool>::CreateLambda([this] { const FOKSceneObject* X = Obj(); return X && X->Character.IkPartsOff == 0; }), 10.f)];
 	Props->AddSlot().AutoHeight()[PartBox];
+	// 復位: one part's targets back onto where its limbs are under FK (HS2Studio6 IK 复位).
+	TSharedRef<SWrapBox> ResetBox = SNew(SWrapBox).UseAllottedSize(true);
+	ResetBox->AddSlot().Padding(1.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("復位")), 10.f)];
+	for (int32 I = 0; I < 5; ++I)
+		ResetBox->AddSlot().Padding(1.f)[Button(FText::FromString(Parts[I]), [this, I] { if (FOKSceneObject* X = Obj()) IkFromFk(*X, I); }, 36.f, 16.f, false, 9.f)];
+	Props->AddSlot().AutoHeight()[ResetBox];
 	Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[CheckBox(TEXT("畫面上顯示 IK 點（點一下啟用並用把手移動）"), [this] { return bShowIkPoints; }, [this](bool B) { bShowIkPoints = B; })];
 	// The effectors: green while on; the chosen one is outlined by its name in the heading below.
 	TSharedRef<SWrapBox> Grid = SNew(SWrapBox).UseAllottedSize(true);
