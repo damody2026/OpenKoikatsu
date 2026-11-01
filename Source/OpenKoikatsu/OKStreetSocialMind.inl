@@ -699,7 +699,8 @@ FString AOKStreetSocialScene::MenuText(float Satiety,float Appetite,int32 Girl) 
  for(const auto* I:ItemsHere(Place)){
   TArray<FString> Prices;for(const auto& P:I->Price)Prices.Add(P.Key.IsEmpty()?FString::FromInt(P.Value):P.Key+FString::FromInt(P.Value));
   const float Fills=OKStreetItemFill(*I); // a drink fits even when full
-  Lines.Add(FString::Printf(TEXT("%s %s %s"),*I->Id,*I->Name,*FString::Join(Prices,TEXT("/")))+(Fills*Appetite>Room?OKT(TEXT("ui.mind.menu_too_much")):FString()));
+  // Non-food on the list (the park's fish food) is marked: right under "you just ate", she turned it down as "not hungry".
+  Lines.Add(FString::Printf(TEXT("%s %s %s"),*I->Id,*I->Name,*FString::Join(Prices,TEXT("/")))+(!I->Consumable?OKT(TEXT("ui.mind.menu_not_food")):Fills*Appetite>Room?OKT(TEXT("ui.mind.menu_too_much")):FString()));
  }
  if(!State->Cart.IsEmpty()){TArray<FString> Cart;for(const auto& L:State->Cart)if(const auto* I=State->Catalog.Find(L.ItemId))Cart.Add((L.ForHer?OKT(TEXT("ui.economy.she_speaker_label")):OKT(TEXT("ui.mind.he_label")))+I->Name);Lines.Add(OKT(TEXT("ui.mind.ordered_label"))+FString::Join(Cart,OKT(TEXT("ui.bank.list_separator"))));}
  return FString::Join(Lines,OKT(TEXT("ui.economy.semicolon_mark")));
