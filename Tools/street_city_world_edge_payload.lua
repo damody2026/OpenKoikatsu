@@ -800,6 +800,37 @@ def motel_world_ocean_probe():
   rows.append(dict(label=a.get_actor_label(),cls=a.get_class().get_name(),loc=[t.translation.x,t.translation.y,t.translation.z],rot=[t.rotation.rotator().roll,t.rotation.rotator().pitch,t.rotation.rotator().yaw],scale=[t.scale3d.x,t.scale3d.y,t.scale3d.z],bounds=[o.x-e.x,o.y-e.y,o.z-e.z,o.x+e.x,o.y+e.y,o.z+e.z],components=comps))
  assert sha(MAPFILE)==LOAD_SHA
  (EDGE_OUT/'ocean-probe.json').write_text(json.dumps(dict(status='read_only_probe',map_sha256=LOAD_SHA,actors=rows),ensure_ascii=False,indent=1),'utf8')
+def motel_world_water_copy_cleanup():
+ # world_water_copy_cleanup: the abandoned top-only water copies (/Game/UniversityCity/WorldEdgeV1/Water, left by a
+ # failed 2026-11-01 attempt before WorldEdge_Water replaced the G??_Water planes) are deleted when nothing references them
+ rows=[]
+ for p in EAL.list_assets('/Game/UniversityCity/WorldEdgeV1/Water',True,False):
+  pkg=p.split('.')[0];refs=[r for r in (EAL.find_package_referencers_for_asset(pkg,False) or []) if not str(r).startswith(pkg)]
+  if refs:rows.append(dict(asset=p,kept=True,referencers=[str(r) for r in refs]));continue
+  assert EAL.delete_asset(pkg),p;rows.append(dict(asset=p,deleted=True))
+ (EDGE_OUT/('water-copy-cleanup-'+time.strftime('%Y%m%d-%H%M%S')+'.json')).write_text(json.dumps(dict(status='done',assets=rows),ensure_ascii=False,indent=1),'utf8')
+def motel_world_water_bed_probe():
+ # world_water_bed_probe (read-only): the ground top under every cell of the city water plane
+ # (world-edge-v1/water-plane/mask.json from Tools/build_street_city_water_plane.lua: 1 m cells, x rows of y runs),
+ # passing through our own WorldEdge_/Beach_/Park_/Landmark_ dressing and the water planes, so the seabed heightfield
+ # can cover inland lakes and rivers too (the shore grid stops at x0+300 m; A13's lake showed grass squares under the
+ # water). Output world-edge-v1/water-bed.json: rows {x, y0, z: space separated cm ints, -1 none}.
+ M=json.loads((EDGE_OUT/'water-plane/mask.json').read_text('utf8'));world=unreal.EditorLevelLibrary.get_editor_world()
+ def own(l):return l.startswith(('WorldEdge_','Beach_','Park_','Landmark_')) or bool(re.match(r'^G\d\d_Water$',l)) or l.startswith('Activity_ACTSPACE')
+ def ground(x,y):
+  ign=[]
+  for _ in range(10):
+   r=unreal.SystemLibrary.line_trace_single(world,unreal.Vector(x,y,5000),unreal.Vector(x,y,-5000),unreal.TraceTypeQuery.TRACE_TYPE_QUERY1,True,ign,unreal.DrawDebugTrace.NONE,True)
+   t=r.to_tuple() if r is not None else (False,)
+   if not t[0] or t[9] is None:return -1
+   if own(t[9].get_actor_label()):ign.append(t[9]);continue
+   return int(round(t[4].z))
+  return -1
+ rows=[]
+ for x,runs in M['rows']:
+  for y0,y1 in runs:rows.append(dict(x=x,y0=y0,z=' '.join(str(ground(x*100+50,y*100+50)) for y in range(y0,y1))))
+ assert sha(MAPFILE)==LOAD_SHA
+ (EDGE_OUT/'water-bed.json').write_text(json.dumps(dict(status='read_only_probe',map_sha256=LOAD_SHA,step_cm=100,mask_sha256=sha(EDGE_OUT/'water-plane/mask.json'),rows=rows)),'utf8')
 def motel_world_water_plane_install():
  # world_water_plane_install: world-edge-v1/water-plane/water-plane.glb (Tools/build_street_city_water_plane.lua) as
  # one NoCollision, no-shadow actor WorldEdge_Water with the city water material (G04_Water's M_ocean). The G??_Water

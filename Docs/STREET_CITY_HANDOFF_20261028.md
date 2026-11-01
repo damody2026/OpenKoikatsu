@@ -373,9 +373,10 @@
   - 河口仍有的階梯水色，原因是 G??_Water 網格帶著從 z 0 角點拉出的斜面扇。新增 `Tools/build_street_city_water_plane.lua`，以 `world_water_plane_install` 裝成一整片 z 1100 的 `WorldEdge_Water`（820 三角面），原 G??_Water 隱藏。詳見 `Docs/STREET_ERRORS.md`。
   - 驗收：4 段實走全通過，重拍 `shop-survey-v1/captures-20261101-102245`，A03 河口和外海連成同一種水色，海堤清楚，G113 內河正常。
   - 新的唯讀探測：`world_seabed_layers_probe`（區域可由 `seabed-layers-region.json` 指定）、`world_point_actors_probe`、`world_water_owner_probe`（逐點列出覆蓋的水面三角形與 z）。
-  - 剩下：
-    - A13 左上內陸湖（x>299 m，不在 shore-grid 範圍）水下仍看得到綠色草地方塊，要把海床高度面延伸到全城水域；
-    - 燈塔旁白色方塊來源未查；
-    - `/Game/UniversityCity/WorldEdgeV1/Water/` 下有一個沒用到的 G01 複本資產，可刪。
+  - 後續（11-01 中午，已完成）：
+    - **內陸水域**：新增唯讀探測 `world_water_bed_probe`，依 `water-plane/mask.json` 量全城 200,415 個水格底下的地面。沙片建置在 x ≥ 299 m 鋪岸坡剖面的海床（10,940 個 2 m 方塊），A13 內陸湖的綠色方塊已消失。
+    - **燈塔旁白色方塊**：是 G04 原地面在沙灘線外側殘留的小塊陸地（1110～1198 cm）。改成通則：沙灘線外側高出海床的殘留地面，一律用沙丘蓋住（原高 +15 cm，每公尺降 25 cm）。
+    - **沒用到的水面複本**：`world_water_copy_cleanup` 刪掉了 G01、G02 兩個沒人引用的 `_Top` 複本。
+    - **驗收**：4 段實走全部通過，重拍見 `shop-survey-v1/captures-20261101-114953`。
 - 背景鏈（scratchpad `bed_chain.txt`）：實走與重拍每 30 秒看佇列，有更高優先的人在等就停掉自己的程序樹、release，之後重跑該段；安裝 job 失敗即停。
 - 實走偶發失敗（10-31 16:42、19:15）：發生在泳池入水台階往下的第一階，不是旅館樓梯，屬於「懸空」判定的餘裕太小（站立高差約 120.5 cm，上限 120 cm），詳見 `Docs/STREET_ERRORS.md`。要修得改 StreetSocialCity 的 `CityEnvironmentImmersionAudit.cpp`，依規則不動，失敗就重跑。

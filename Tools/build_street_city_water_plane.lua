@@ -51,6 +51,10 @@ for x in range(N+1):
   if key not in runs:rects.append((open_.pop(key),x)+key)
  for key in runs:
   if key not in open_:open_[key]=x
+# the water cells for world_water_bed_probe (ground under every water cell, for the seabed heightfield)
+mask=[[x,[[int(a),int(b)] for a,b in sorted({(y0,y1) for (y0,y1) in [(r[2],r[3]) for r in rects if r[0]<=x<r[1]]})]] for x in range(N)]
+mask=[m for m in mask if m[1]]
+(O/'water-plane').mkdir(parents=True,exist_ok=True);(O/'water-plane/mask.json').write_text(json.dumps(dict(step_cm=100,rows=mask)),'utf8')
 bm=bmesh.new()
 for x0,x1,y0,y1 in rects:
  bm.faces.new([bm.verts.new((a,b,11.0)) for a,b in ((x0,y0),(x1,y0),(x1,y1),(x0,y1))])

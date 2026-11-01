@@ -172,6 +172,15 @@ Dm=blur(np.minimum(np.array(D),200.0)*st,1.0/st)
 ds=[d for d,_ in prof]+[SL+SH+20];zs=[z for _,z in prof]+[10.15]
 zf=np.maximum(Z/100+.15,np.interp(Dm-T['off'],ds,zs))
 bedc=(Z>=0)&(Z<1060)&WET
+# leftover ground seaward of the beach line (the blur drops 1-3 m land patches, which then stood in the water as bare
+# terrain boxes next to the lighthouse, A03 2026-11-01): each such cell (ground over the bed, under 13 m) is buried in a
+# sand mound, its height + 15 cm falling 25 cm per metre into the seabed around it
+isl=(Z>=1060)&(Z<1300)&(F<L)
+Iz=np.where(isl,Z/100+.15,-1e9)
+for _ in range(10):
+ Jz=Iz.copy();Jz[1:,:]=np.maximum(Jz[1:,:],Iz[:-1,:]-.25);Jz[:-1,:]=np.maximum(Jz[:-1,:],Iz[1:,:]-.25);Jz[:,1:]=np.maximum(Jz[:,1:],Iz[:,:-1]-.25);Jz[:,:-1]=np.maximum(Jz[:,:-1],Iz[:,1:]-.25);Iz=Jz
+mound=(Iz>zf)&(Iz>10.15)&((WET|isl)|(Z<1060))
+zf=np.where(mound,np.maximum(zf,Iz),zf);bedc=bedc|mound
 # 2 x 2 cell blocks (a 1 m heightfield was 296k triangles): a block covers its bed cells at their highest height
 S=2;by,bx=(ny+S-1)//S,(nx+S-1)//S
 zp=np.full((by*S,bx*S),-1e9);zp[:ny,:nx]=np.where(bedc,zf,-1e9);zp=zp.reshape(by,S,bx,S).max(axis=(1,3));bb=zp>-1e8
@@ -189,6 +198,54 @@ for i in range(by):
 # merge the flat open water (and every planar run) into large faces
 bmesh.ops.dissolve_limit(hm,angle_limit=math.radians(0.3),use_dissolve_boundaries=False,verts=hm.verts,edges=hm.edges)
 tmp=bpy.data.meshes.new('bed');hm.to_mesh(tmp);hm.free();bm.from_mesh(tmp)
+# inland water beyond the shore grid (lakes and rivers past x0+300 m showed grass squares under the water, A13
+# 2026-11-01): world-edge-v1/water-bed.json (native world_water_bed_probe, ground under every water-plane cell) gets the
+# same heightfield with a bank profile instead of a beach one (no beach lines inland): 10.85 at the bank, 10.15 from
+# 10 m out, never under the ground + 15 cm. Land = every cell outside the water plane.
+inland=0
+WB=O/'water-bed.json'
+if WB.exists():
+ R=json.loads(WB.read_text('utf8'));NW=1101;Zw=np.full((NW,NW),-1.0)
+ for r in R['rows']:
+  z=[int(v) for v in r['z'].split()];Zw[r['x'],r['y0']:r['y0']+len(z)]=z
+ wet=Zw>-1;D=np.where(wet,INF,0.0).tolist()
+ for i in range(NW):
+  Rr=D[i];P=D[i-1] if i else None
+  for k in range(NW):
+   v=Rr[k]
+   if k and Rr[k-1]+1<v:v=Rr[k-1]+1
+   if P is not None:
+    if P[k]+1<v:v=P[k]+1
+    if k and P[k-1]+s2<v:v=P[k-1]+s2
+    if k+1<NW and P[k+1]+s2<v:v=P[k+1]+s2
+   Rr[k]=v
+ for i in range(NW-1,-1,-1):
+  Rr=D[i];P=D[i+1] if i+1<NW else None
+  for k in range(NW-1,-1,-1):
+   v=Rr[k]
+   if k+1<NW and Rr[k+1]+1<v:v=Rr[k+1]+1
+   if P is not None:
+    if P[k]+1<v:v=P[k]+1
+    if k+1<NW and P[k+1]+s2<v:v=P[k+1]+s2
+    if k and P[k-1]+s2<v:v=P[k-1]+s2
+   Rr[k]=v
+ Di=blur(np.minimum(np.array(D),60.0),1.0)
+ zi=np.maximum(Zw/100+.15,np.interp(Di,[0,2,10],[10.85,10.60,10.15]))
+ x_end=int(math.floor(xs[-1]))   # the shore grid's last row: a 1 m overlap leaves no seam
+ bi=wet&(Zw>=0)&(Zw<1060);bi[:x_end,:]=False
+ by2,bx2=(NW+S-1)//S,(NW+S-1)//S
+ zq=np.full((by2*S,bx2*S),-1e9);zq[:NW,:NW]=np.where(bi,zi,-1e9);zq=zq.reshape(by2,S,bx2,S).max(axis=(1,3));bq=zq>-1e8
+ im2=bmesh.new();cw={}
+ def corner2(i,k):
+  # x row i (metres / S), y column k; the highest adjacent bed block
+  if (i,k) not in cw:
+   z=max(zq[a,b] for a in (i-1,i) for b in (k-1,k) if 0<=a<by2 and 0<=b<bx2 and bq[a,b])
+   cw[(i,k)]=im2.verts.new((i*S,k*S,z))
+  return cw[(i,k)]
+ for i in range(by2):
+  for k in range(bx2):
+   if bq[i,k]:im2.faces.new((corner2(i,k),corner2(i+1,k),corner2(i+1,k+1),corner2(i,k+1)));inland+=1
+ tmp2=bpy.data.meshes.new('inland');im2.to_mesh(tmp2);im2.free();bm.from_mesh(tmp2)
 def finish(b,name,matname,rgb):
  bmesh.ops.recalc_face_normals(b,faces=b.faces)
  for f in b.faces:
@@ -220,7 +277,7 @@ for p in quay:
  if 0<=i<ny and 0<=k<nx:px[i,k]=(1,0,0,1)
 im=bpy.data.images.new('seabed',nx,ny);im.pixels.foreach_set(px.astype(np.float32).ravel());im.filepath_raw=str(dest/'seabed-review.png');im.file_format='PNG';im.save()
 meta=export(ob,dest/'coast-strip.glb')
-meta.update(status='authored_requires_native_install',mode='shore-grid-v3',probe_map_sha256=G['map_sha256'],opt=T,lines=len(lines),dropped_dry_lines=dropped,bed_cells=bed,quay_points=len(quay),line_lengths_m=sorted([round(length(l)) for l in lines],reverse=True)[:20])
+meta.update(status='authored_requires_native_install',mode='shore-grid-v3',probe_map_sha256=G['map_sha256'],opt=T,lines=len(lines),dropped_dry_lines=dropped,bed_cells=bed,inland_blocks=inland,quay_points=len(quay),line_lengths_m=sorted([round(length(l)) for l in lines],reverse=True)[:20])
 if wall:meta['seawall']=export(wall,dest/'seawall.glb')
 (dest/'build.json').write_text(json.dumps(meta,indent=1),'utf8');print('SHORE',meta['triangles'],'tris lines',meta['lines'],'quay',len(quay),'wall',meta.get('seawall',{}).get('triangles'),flush=True)
 ]====]
