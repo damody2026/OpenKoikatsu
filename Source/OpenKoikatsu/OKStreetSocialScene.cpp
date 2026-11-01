@@ -3996,7 +3996,9 @@ void AOKStreetSocialScene::Tick(float Dt){
  if(S.InspectSlot!=INDEX_NONE)TickInspect(Dt,PC,Focused); // the inspection room's camera wins over everything
  const bool AppEscape=Focused&&!S.App.IsEmpty()&&OKKeyPressed(PC,EKeys::Escape);if(AppEscape)CloseApp();
  if(Focused&&S.App.IsEmpty()&&OKKeyPressed(PC,EKeys::M)&&S.PrivateGirl==INDEX_NONE)ToggleBigMap();
- if(Focused&&!AppEscape&&OKKeyPressed(PC,EKeys::Escape)){if(S.BigMapOpen)ToggleBigMap();else if(S.SleepNap&&S.SleepPhase==2)S.SleepWake=true;else if(S.OutingGirl!=INDEX_NONE)CancelOuting(OKT(TEXT("ui.scene.go_cancelled")));else if(S.PrivateGirl!=INDEX_NONE)FinishPrivate();else if((S.NavGirl!=INDEX_NONE||S.NavPointActive)&&S.Target==INDEX_NONE)StopNavigation(OKT(TEXT("ui.scene.nav_cancelled")));else if(S.Pair.Partner!=INDEX_NONE)FinishPhoto();else if(S.Companion!=INDEX_NONE)FarewellCompanion();else if(S.Facility!=INDEX_NONE)FinishFacility();else EndTalk();}
+ // Esc with her answer still on screen closes the talk, not the walk: 安可 agreed to the café, Esc to close the box
+ // cancelled the outing and she went back to her schedule, twice.
+ if(Focused&&!AppEscape&&OKKeyPressed(PC,EKeys::Escape)){if(S.BigMapOpen)ToggleBigMap();else if(S.SleepNap&&S.SleepPhase==2)S.SleepWake=true;else if(S.OutingGirl!=INDEX_NONE&&S.FreeTalkOpen)FreeTalkClose();else if(S.OutingGirl!=INDEX_NONE)CancelOuting(OKT(TEXT("ui.scene.go_cancelled")));else if(S.PrivateGirl!=INDEX_NONE)FinishPrivate();else if((S.NavGirl!=INDEX_NONE||S.NavPointActive)&&S.Target==INDEX_NONE)StopNavigation(OKT(TEXT("ui.scene.nav_cancelled")));else if(S.Pair.Partner!=INDEX_NONE)FinishPhoto();else if(S.Companion!=INDEX_NONE)FarewellCompanion();else if(S.Facility!=INDEX_NONE)FinishFacility();else EndTalk();}
  if(Focused&&S.Pair.Partner!=INDEX_NONE&&OKKeyPressed(PC,EKeys::P))CapturePhoto();
  if(OKStreetWorldTouchAllowed(Focused,S.MouseUI,S.Target!=INDEX_NONE,S.TouchActive,S.WorldTouchPointerBlocked)&&OKKeyPressed(PC,EKeys::LeftMouseButton)){
   float MX=0,MY=0;FVector Origin,Ray;

@@ -659,6 +659,7 @@ private:
  void StartActivityFromPanel(int32 Girl,const FString& ActivityId,bool bAgreed=false);
  void ResumeTalkQuiet(int32 Girl);
  FString FreeTalkDoing() const;
+ FString FreeTalkActivity() const; // FreeTalkDoing without the table
  FString FreeTalkNearby() const;
  void ToggleLanguage();
  void ToggleVoiceSource();void ToggleTtsBaseSize();

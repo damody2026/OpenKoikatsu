@@ -907,8 +907,24 @@ void AOKStreetSocialScene::ResumeTalkQuiet(int32 Girl){
  S.FreeTalkOpen=true;
 }
 
-// What the pair is doing right now, for the model.
+// What the pair is doing right now, for the model, and what is on their table.
 FString AOKStreetSocialScene::FreeTalkDoing() const{
+ if(!State)return FString();const auto& S=*State;
+ // What is on the table and how far along, whatever they sit at: told only "eating together", 胡桃 said "the noodles
+ // are here" three times before they came; 安可 at a café seat was told only "sitting and chatting".
+ FString Table;
+ if(!S.Table.IsEmpty()){
+  TArray<FString> Dishes;
+  for(const auto& D:S.Table){
+   const FString Whose=OKT(D.ForHer&&(D.Her==INDEX_NONE||D.Her==FreeTalkPartner())?TEXT("ui.outing.table_yours"):D.ForHer?TEXT("ui.outing.table_others"):TEXT("ui.outing.table_his"));
+   Dishes.Add(OKMsg(!D.Served?TEXT("ui.outing.table_dish_pending"):D.Percent>=99.f?TEXT("ui.outing.table_dish_untouched"):TEXT("ui.outing.table_dish_left"),{{TEXT("whose"),Whose},{TEXT("item"),D.Name},{TEXT("percent"),FMath::RoundToInt(D.Percent)}}));
+  }
+  Table=OKMsg(TEXT("ui.outing.table_now"),{{TEXT("dishes"),FString::Join(Dishes,OKT(TEXT("ui.outing.table_sep")))}});
+ }
+ return FreeTalkActivity()+Table;
+}
+
+FString AOKStreetSocialScene::FreeTalkActivity() const{
  if(State){const int32 Lift=ElevatorWithMale();if(Lift!=INDEX_NONE){const auto& E=State->Elevators[Lift];return OKMsg(TEXT("ui.outing.in_elevator_at_place"), {{TEXT("place_name"), OKStreetPlaces()[E.Place].Name}, {TEXT("floor_label"), E.Phase==4?OKT(TEXT("ui.outing.elevator_moving_label")):*E.Labels[E.Floor]}});}}
  const auto& S=*State;
  if(S.OutingGirl!=INDEX_NONE){
@@ -950,6 +966,9 @@ FString AOKStreetSocialScene::FreeTalkNearby() const{
  for(const auto& P:OKStreetPlaces())if(!Near.Contains(&P)){FString Why;if(PlaceClosedNow(P.Id,Why))FarClosed.Add(FString(P.Name)+OKMsg(TEXT("ui.outing.far_closed_why"),{{TEXT("why"),Why}}));}
  FString Out=Items.IsEmpty()?OKT(TEXT("ui.outing.no_special_place_nearby")):FString::Join(Items,OKT(TEXT("ui.bank.list_separator")));
  if(!FarClosed.IsEmpty())Out+=OKMsg(TEXT("ui.outing.far_closed_places"),{{TEXT("places"),FString::Join(FarClosed,OKT(TEXT("ui.bank.list_separator")))}});
+ // And that the rest are open: with nothing said of the library, 安可 dropped her own 14:00 library plan because "it
+ // is closed today" while 优香 and she were both in it within the hour.
+ Out+=OKT(TEXT("ui.outing.others_open_now"));
  return Out;
 }
 
