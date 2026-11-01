@@ -515,6 +515,21 @@ struct OKSTUDIO_API FOKSceneLight
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")
 	bool bCharactersOnly = false;
 
+	/** Lights the map only (HS2Studio6 作用對象「地圖」): not the items, and never the characters' toon light. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")
+	bool bMapOnly = false;
+
+	/** Spot: the inner cone angle, inside which the light is full (degrees; < 0: 80 % of the spot angle). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")
+	float SpotInnerAngle = -1.f;
+
+	/** Shadow softness 0 (hard) .. 1 (soft): the light's source size (a point or spot light's radius, the sun's angle). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light", meta = (ClampMin = "0", ClampMax = "1"))
+	float ShadowSoftness = 0.f;
+
+	/** The spot's inner cone angle as used. */
+	float InnerConeAngle() const { return SpotInnerAngle < 0.f ? SpotAngle * 0.8f : FMath::Min(SpotInnerAngle, SpotAngle); }
+
 	bool operator==(const FOKSceneLight& O) const = default;
 };
 

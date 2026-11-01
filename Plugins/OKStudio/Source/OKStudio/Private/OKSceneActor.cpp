@@ -520,7 +520,7 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 		{
 			USpotLightComponent* Spot = NewObject<USpotLightComponent>(this);
 			Spot->SetOuterConeAngle(Object.Light.SpotAngle);
-			Spot->SetInnerConeAngle(Object.Light.SpotAngle * 0.8f);
+			Spot->SetInnerConeAngle(Object.Light.InnerConeAngle());
 			Spot->SetAttenuationRadius(Object.Light.Range);
 			Light = Spot;
 			break;
@@ -546,8 +546,12 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 		Light->SetIntensity(Object.Light.Intensity);
 		Light->SetLightColor(Object.Light.Color);
 		Light->SetCastShadows(Object.Light.bShadows);
-		// Lighting channel 2 is the map's: every light but Studio's character light reaches it.
-		Light->LightingChannels.bChannel0 = true;
+		// Shadow softness is the light's size: a point or spot light's radius (up to 30 cm), the sun's angle (up to 10°).
+		const float Soft = FMath::Clamp(Object.Light.ShadowSoftness, 0.f, 1.f);
+		if (UDirectionalLightComponent* Sun = Cast<UDirectionalLightComponent>(Light)) Sun->LightSourceAngle = FMath::Lerp(0.5357f, 10.f, Soft);
+		else if (UPointLightComponent* Point = Cast<UPointLightComponent>(Light)) Point->SourceRadius = Soft * 30.f;
+		// Lighting channel 2 is the map's: every light but Studio's character light reaches it; channel 0 is the items'.
+		Light->LightingChannels.bChannel0 = !Object.Light.bMapOnly;
 		Light->LightingChannels.bChannel2 = !Object.Light.bCharactersOnly;
 		Light->RegisterComponent();
 		Out.Component = Light;
@@ -1543,7 +1547,7 @@ void AOKSceneActor::UpdateItemLighting()
 		{
 			if (Object.Kind != EOKSceneObjectKind::Light) continue;
 			bAnyLight = true;
-			if (Object.Light.Type != EOKSceneLightType::Directional || (Pass == 0 && !Object.Light.bCharactersOnly) || !Document->IsShown(Object.Id)) continue;
+			if (Object.Light.Type != EOKSceneLightType::Directional || Object.Light.bMapOnly || (Pass == 0 && !Object.Light.bCharactersOnly) || !Document->IsShown(Object.Id)) continue;
 			if (const FShown* S = Shown.Find(Object.Id); S && S->Component.IsValid())
 				if ((Light = Cast<ULightComponent>(S->Component.Get()))) { Intensity = Object.Light.Intensity / 4.f; SourceLight = &Object.Light; break; }
 		}

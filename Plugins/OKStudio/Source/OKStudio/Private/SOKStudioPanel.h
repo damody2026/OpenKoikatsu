@@ -1685,7 +1685,9 @@ public:
 			{ TEXT("高 cm"), TEXT("面光發光矩形的高度（公分）。") },
 			{ TEXT("範圍 cm"), TEXT("點光、聚光、面光照得到的距離；視窗裡的線框就是這個範圍。") },
 			{ TEXT("聚光角"), TEXT("聚光燈錐形的張角（度）。") },
-			{ TEXT("作用對象"), TEXT("「只照角色與道具」時地圖不受這盞燈影響。") },
+			{ TEXT("作用對象"), TEXT("「角色道具」只照角色與道具，地圖不受這盞燈影響；「地圖」只照地圖，道具不受影響，角色也不拿它當卡通光。") },
+			{ TEXT("內錐角"), TEXT("聚光燈中心全亮的角度（度），從這裡到聚光角之間漸暗；預設是聚光角的八成。") },
+			{ TEXT("陰影軟硬"), TEXT("0 是銳利的硬陰影，越大陰影邊緣越模糊（點光、聚光放大光源半徑，方向光放大太陽角度）。") },
 			{ TEXT("正交寬度 cm"), TEXT("正交相機看得到的橫向寬度（公分），等於正交時的縮放。") },
 			{ TEXT("透明度"), TEXT("整個道具的透明度；只有原作可透明的道具有這項。") },
 			{ TEXT("描邊寬度"), TEXT("卡通描邊的粗細倍率，0 是不描邊。") },
@@ -2001,7 +2003,10 @@ public:
 			if (O->Light.Type != EOKSceneLightType::Directional)
 				Float(TEXT("範圍 cm"), [](FOKSceneObject& X) { return X.Light.Range; }, [](FOKSceneObject& X, float V) { X.Light.Range = V; }, 1.f, 10000.f, 10.f);
 			if (O->Light.Type == EOKSceneLightType::Spot)
+			{
 				Float(TEXT("聚光角"), [](FOKSceneObject& X) { return X.Light.SpotAngle; }, [](FOKSceneObject& X, float V) { X.Light.SpotAngle = V; }, 1.f, 80.f, 1.f);
+				Float(TEXT("內錐角"), [](FOKSceneObject& X) { return X.Light.InnerConeAngle(); }, [](FOKSceneObject& X, float V) { X.Light.SpotInnerAngle = FMath::Clamp(V, 0.f, X.Light.SpotAngle); }, 0.f, 80.f, 1.f);
+			}
 			if (O->Light.Type == EOKSceneLightType::Area)
 			{
 				Float(TEXT("寬 cm"), [](FOKSceneObject& X) { return X.Light.AreaWidth; }, [](FOKSceneObject& X, float V) { X.Light.AreaWidth = FMath::Max(V, 1.f); }, 1.f, 2000.f, 1.f);
@@ -2009,7 +2014,10 @@ public:
 			}
 			ColorRow(TEXT("顏色"), [](FOKSceneObject& X) { return X.Light.Color; }, [](FOKSceneObject& X, const FLinearColor& C) { X.Light.Color = FLinearColor(C.R, C.G, C.B, 1.f); });
 			Check(TEXT("陰影"), [](FOKSceneObject& X) { return X.Light.bShadows; }, [](FOKSceneObject& X, bool V) { X.Light.bShadows = V; });
-			Choice(TEXT("作用對象"), { TEXT("全部"), TEXT("只照角色與道具") }, [](FOKSceneObject& X) { return X.Light.bCharactersOnly ? 1 : 0; }, [](FOKSceneObject& X, int32 V) { X.Light.bCharactersOnly = V == 1; });
+			if (O->Light.bShadows && O->Light.Type != EOKSceneLightType::Area)
+				Float(TEXT("陰影軟硬"), [](FOKSceneObject& X) { return X.Light.ShadowSoftness; }, [](FOKSceneObject& X, float V) { X.Light.ShadowSoftness = FMath::Clamp(V, 0.f, 1.f); }, 0.f, 1.f, 0.05f);
+			Choice(TEXT("作用對象"), { TEXT("全部"), TEXT("角色道具"), TEXT("地圖") }, [](FOKSceneObject& X) { return X.Light.bMapOnly ? 2 : X.Light.bCharactersOnly ? 1 : 0; },
+				[](FOKSceneObject& X, int32 V) { X.Light.bCharactersOnly = V == 1; X.Light.bMapOnly = V == 2; });
 			break;
 		case EOKSceneObjectKind::Camera:
 			Label(TEXT("相機"));
@@ -2375,7 +2383,7 @@ public:
 								else { PickItem(G, Ca, N); FOKStudioSettings::Get().UseRecent(ItemKey(G, Ca, N)); }
 								return FReply::Handled();
 							})
-							[SNew(STextBlock).Font(Font(10.f)).ColorAndOpacity(bFavorite ? FLinearColor(1.f, 0.85f, 0.3f) : OKStudioStyle::Text()).Text(FText::FromString(I.Name))]
+							[SNew(STextBlock).Font(Font(10.f)).ColorAndOpacity(bFavorite ? FLinearColor(1.f, 0.85f, 0.3f) : OKStudioStyle::Text()).OverflowPolicy(ETextOverflowPolicy::Ellipsis).AddMetaData<FTagMetaData>(TEXT("Ellipsis")).Text(FText::FromString(I.Name))]
 						]
 					];
 				})
