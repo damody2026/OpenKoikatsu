@@ -1,10 +1,27 @@
 ﻿#include "OKStudioSettings.h"
+#include "AudioDevice.h"
+#include "Engine/Engine.h"
+#include "HAL/IConsoleManager.h"
 #include "Input/Events.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+
+void FOKStudioSettings::ApplyGame(bool bStartup) const
+{
+	auto Set = [](const TCHAR* Name, int32 Value)
+	{
+		// As the console would (a launcher's -ExecCmds sets them that way too).
+		if (IConsoleVariable* V = IConsoleManager::Get().FindConsoleVariable(Name)) V->Set(Value, ECVF_SetByConsole);
+	};
+	if (!bStartup || MasterVolume != 1.f)
+		if (GEngine) if (FAudioDeviceHandle Device = GEngine->GetMainAudioDevice()) Device->SetTransientPrimaryVolume(FMath::Clamp(MasterVolume, 0.f, 1.f));
+	if (!bStartup || !bRunInBackground) Set(TEXT("t.IdleWhenNotForeground"), bRunInBackground ? 0 : 1);
+	if (VSync >= 0) Set(TEXT("r.VSync"), VSync);
+	if (MaxFps >= 0) Set(TEXT("t.MaxFPS"), MaxFps);
+}
 
 FOKStudioSettings& FOKStudioSettings::Get()
 {
@@ -131,6 +148,7 @@ void FOKStudioSettings::Reset()
 	bLoaded = true;
 	Favorites = F; Hidden = H; Recent = R; RecentColors = C;
 	Save();
+	ApplyGame(false);
 }
 
 void FOKStudioSettings::Load()
@@ -143,8 +161,11 @@ void FOKStudioSettings::Load()
 		auto Num = [&J](const TCHAR* Name, float& V) { double D; if (J->TryGetNumberField(Name, D)) V = float(D); };
 		Num(TEXT("orbit_speed"), OrbitSpeed); Num(TEXT("pan_speed"), PanSpeed); Num(TEXT("zoom_speed"), ZoomSpeed); Num(TEXT("fly_speed"), FlySpeed);
 		Num(TEXT("gizmo_scale"), GizmoScale); Num(TEXT("point_scale"), PointScale); Num(TEXT("snap_move"), SnapMove); Num(TEXT("snap_rotate"), SnapRotate); Num(TEXT("snap_scale"), SnapScale);
-		Num(TEXT("ui_scale"), UiScale);
+		Num(TEXT("ui_scale"), UiScale); Num(TEXT("master_volume"), MasterVolume);
 		J->TryGetBoolField(TEXT("fly_mode"), bFlyMode);
+		J->TryGetBoolField(TEXT("run_in_background"), bRunInBackground);
+		J->TryGetNumberField(TEXT("vsync"), VSync);
+		J->TryGetNumberField(TEXT("max_fps"), MaxFps);
 		double D;
 		if (J->TryGetNumberField(TEXT("backup_minutes"), D)) BackupMinutes = int32(D);
 		if (J->TryGetNumberField(TEXT("backup_keep"), D)) BackupKeep = FMath::Max(1, int32(D));
@@ -175,6 +196,8 @@ void FOKStudioSettings::Save() const
 	J->SetNumberField(TEXT("gizmo_scale"), GizmoScale); J->SetNumberField(TEXT("point_scale"), PointScale); J->SetNumberField(TEXT("snap_move"), SnapMove); J->SetNumberField(TEXT("snap_rotate"), SnapRotate); J->SetNumberField(TEXT("snap_scale"), SnapScale);
 	J->SetNumberField(TEXT("backup_minutes"), BackupMinutes); J->SetNumberField(TEXT("backup_keep"), BackupKeep);
 	J->SetNumberField(TEXT("ui_scale"), UiScale);
+	J->SetNumberField(TEXT("master_volume"), MasterVolume); J->SetBoolField(TEXT("run_in_background"), bRunInBackground);
+	J->SetNumberField(TEXT("vsync"), VSync); J->SetNumberField(TEXT("max_fps"), MaxFps);
 	TArray<TSharedPtr<FJsonValue>> Roots;
 	for (const FString& R : CardRoots) Roots.Add(MakeShared<FJsonValueString>(R));
 	J->SetArrayField(TEXT("card_roots"), Roots);

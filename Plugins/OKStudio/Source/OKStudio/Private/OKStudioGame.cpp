@@ -217,6 +217,7 @@ UOKStudioGame* UOKStudioGame::Start(UWorld* World, const FString& InFile, FStrin
 	Game->ResetHistory();
 	Game->bDirty = false;
 	Game->LastBackupSeconds = FPlatformTime::Seconds();
+	FOKStudioSettings::Get().ApplyGame(true);
 	OKStudioControl::Start();
 	return Game;
 }

@@ -1920,6 +1920,19 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSettings()
 	{
 	case 0:
 		Setting(TEXT("介面縮放"), TEXT("整個工作室介面的大小（乘在 HS2Studio6 的縮放上）；立即生效"), Number(&S.UiScale, 0.5f, 2.f, 0.05f), [] { FOKStudioSettings::Get().UiScale = 1.f; });
+		// HS2Studio6 游戏设置: put on the engine at once and whenever the studio starts.
+		{
+			auto Apply = [] { FOKStudioSettings::Get().Save(); FOKStudioSettings::Get().ApplyGame(false); };
+			static const TCHAR* VSyncNames[] = { TEXT("照引擎"), TEXT("關"), TEXT("開") };
+			Setting(TEXT("主音量"), TEXT("所有聲音（BGM、語音、音效）的音量 0～1"), Spin([] { return FOKStudioSettings::Get().MasterVolume; }, [Apply](float V) { FOKStudioSettings::Get().MasterVolume = FMath::Clamp(V, 0.f, 1.f); Apply(); }, 0.f, 1.f, 0.01f),
+				[Apply] { FOKStudioSettings::Get().MasterVolume = 1.f; Apply(); });
+			Setting(TEXT("背景時繼續執行"), TEXT("視窗不在前景時照常更新畫面與聲音（關掉就閒置省資源）"), CheckBox(TEXT("開"), [] { return FOKStudioSettings::Get().bRunInBackground; }, [Apply](bool B) { FOKStudioSettings::Get().bRunInBackground = B; Apply(); }),
+				[Apply] { FOKStudioSettings::Get().bRunInBackground = true; Apply(); });
+			Setting(TEXT("垂直同步"), TEXT("照引擎＝不改；開＝跟著螢幕更新率"), Button(TAttribute<FText>::CreateLambda([] { return FText::FromString(VSyncNames[FMath::Clamp(FOKStudioSettings::Get().VSync + 1, 0, 2)]); }),
+				[Apply] { FOKStudioSettings::Get().VSync = (FMath::Clamp(FOKStudioSettings::Get().VSync + 1, 0, 2) + 1) % 3 - 1; Apply(); }, 0.f, 18.f, false, 10.f), [Apply] { FOKStudioSettings::Get().VSync = -1; Apply(); });
+			Setting(TEXT("幀率上限"), TEXT("-1 不改（引擎或啟動器的設定），0 不限制，其他是每秒最多幾幀"), Spin([] { return float(FOKStudioSettings::Get().MaxFps); }, [Apply](float V) { FOKStudioSettings::Get().MaxFps = FMath::Clamp(FMath::RoundToInt(V), -1, 1000); Apply(); }, -1.f, 1000.f, 1.f),
+				[Apply] { FOKStudioSettings::Get().MaxFps = -1; Apply(); });
+		}
 		Setting(TEXT("場景檔資料夾"), TEXT("場景瀏覽器的預設資料夾（唯讀）"), OKStudioStyle::Label(FText::FromString(UOKStudioGame::SceneDirectory()), 9.f, TextHint()), nullptr);
 		Setting(TEXT("全部恢復預設"), TEXT("所有設定與快捷鍵回到預設（收藏與最近使用保留）"), Button(FText::FromString(TEXT("恢復預設")), [this] { FOKStudioSettings::Get().Reset(); DeferFloat(TEXT("settings")); }, 0.f, 18.f), nullptr);
 		break;

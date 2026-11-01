@@ -33,6 +33,14 @@ struct FOKStudioSettings
 	FString DefaultCards[2];
 	/** UI scale (times the HS2Studio6 canvas scale). */
 	float UiScale = 1.f;
+	/** Game settings (HS2Studio6 游戏设置): master volume 0..1, keep running unfocused, vsync (-1 the engine's, 0 off,
+	 *  1 on), frame cap (-1 the engine's / the launcher's, 0 none). The defaults leave the engine as it is. */
+	float MasterVolume = 1.f;
+	bool bRunInBackground = true;
+	int32 VSync = -1;
+	int32 MaxFps = -1;
+	/** Puts the game settings on the engine; at startup only those changed from the defaults. */
+	void ApplyGame(bool bStartup) const;
 
 	/** Shortcuts: command id -> chords ("Ctrl+Shift+Z", several separated by ", "); missing ids use the defaults. */
 	TMap<FString, FString> Bindings;

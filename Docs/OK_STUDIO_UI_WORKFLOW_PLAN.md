@@ -1006,6 +1006,13 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
 - 「加入預設角色」（指令 `add.defaultcharacter female|male`）：加入目前篩選性別的預設卡（篩「全部」時加女角）。預設卡是設定的 `default_card_female`／`default_card_male`，預覽區的「設為預設角色」把選中的卡設成它那個性別的預設；沒設時用 `Content/CharacterCards/Demo` 裡第一張該性別的卡。原作沒有卡片的「預設角色」，這裡用一張使用者自己選的卡代替（角色卡不進版控，所以不內建）。
 - 驗證：`CrowdAPNG` 資料夾 104 張，「女」剩 103 張，「男」只剩一張 sex=0 的卡；篩「男」時按「加入預設角色」加入 Demo 的 Male01。遊戲與編輯器都連結成功，`verify_ok_studio --tag u41_1101` 6/6。
 
+#### U42 完成紀錄
+
+- 設定窗「一般」多四列：主音量（0～1，主音訊裝置的暫時主音量）、背景時繼續執行（`t.IdleWhenNotForeground`）、垂直同步（照引擎／關／開，`r.VSync`）、幀率上限（-1 不改、0 不限、其他是上限，`t.MaxFPS`）。改了立刻套用，存在 `settings.json`（`master_volume`、`run_in_background`、`vsync`、`max_fps`）。
+- 工作室啟動時只套和預設不同的值：預設是「不改引擎」，所以測試啟動器加的 `t.MaxFPS 60` 等不會被蓋掉。主控台變數以 Console 的優先序設定，和啟動器的 `-ExecCmds` 同級。
+- 「全部恢復預設」後會再套一次（音量回 1、背景照常執行；垂直同步與幀率上限回到「不改」，引擎維持當下的值）。
+- 驗證：`settings.json` 設音量 0.5、背景不執行、VSync 0、幀率 30 後開工作室，log 讀回 `t.MaxFPS = "30"`、`r.VSync = "0"`、`t.IdleWhenNotForeground = "1"`（LastSetBy: Console），設定窗顯示這些值；測完刪掉設定檔。遊戲與編輯器都連結成功，`verify_ok_studio --tag u42_1101` 6/6。
+
 ### U15　工作室模式只顯示工作室 UI（2026-10-30，使用者要求）
 
 從卡片牆等其他模式進入工作室時，畫面上原本的 UI 會留著。改成：工作室面板加到 viewport 後，從 viewport 的 Slate 樹往下找到面板，沿路把其他兄弟節點（其他模式的 UMG、Slate 面板、圖層）全部收起來，並把 HUD 的 `bShowHUD` 關掉；`Stop` 時還原成原本的可見狀態。
