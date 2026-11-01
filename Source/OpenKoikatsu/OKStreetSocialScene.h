@@ -101,6 +101,7 @@ private:
  void RunPresentationProbe(double Now);
  bool ContactReady(int32 Character) const;
  bool ContactIdle() const;
+ bool SeatedWith(int32 Girl) const;
  bool ContactLover(int32 Character) const;
  TArray<FVector> ContactRoute(const FVector& From,const FVector& To) const;
  void SelectContact(int32 Character);

@@ -19,7 +19,8 @@ static TSharedRef<IHttpRequest,ESPMode::ThreadSafe> OKSongGet(const FString& Url
 
 // The bottom dialogue box: what she says or sings now (the free-talk caption line, so it shows during a talk with her).
 static void OKSongCaption(FOKStreetSceneState& S,const FString& Line){
- const FString Name=S.Manifest.Characters.IsValidIndex(S.Song.Girl)?S.Manifest.Characters[S.Song.Girl].Name:FString();
+ // Her name as the talk captions write it (OKStreetScriptedName): the card's 贞德 is 貞德 in Traditional.
+ const FString Name=S.Manifest.Characters.IsValidIndex(S.Song.Girl)?OKStreetScriptedName(S.Manifest.Characters[S.Song.Girl].Name):FString();
  S.FreeTalkCaptionHer=Name.IsEmpty()?Line:Name+TEXT("：")+Line;
 }
 
@@ -636,7 +637,7 @@ void AOKStreetSocialScene::TickSong(double Now){
    if(!SongAtEase(G.Girl)){G.LaterUntil=Now+45;return;}
    // A cramped room: no room for her dancing or for the camera to take her in whole. She waits for a roomier place
    // (outdoors, a hall) and the panel says so.
-   if(!SongHasRoom(S.Agents[G.Girl-1].Position)){G.LaterUntil=Now+15;const FString Cramped=OKMsg(TEXT("ui.song.needs_room"),{{TEXT("name"),*S.Manifest.Characters[G.Girl].Name}});
+   if(!SongHasRoom(S.Agents[G.Girl-1].Position)){G.LaterUntil=Now+15;const FString Cramped=OKMsg(TEXT("ui.song.needs_room"),{{TEXT("name"),OKStreetScriptedName(S.Manifest.Characters[G.Girl].Name)}});
     if(G.Notice!=Cramped){G.Notice=Cramped;UE_LOG(LogTemp,Display,TEXT("Street song: actor %d waits for a roomier place"),G.Girl);RefreshUI();}return;}
    const FString Offer=OKSongOccasionLine(G.Occasion,TEXT("offer_line"));
    UE_LOG(LogTemp,Display,TEXT("Street song: actor %d sings for him (%s)"),G.Girl,G.Occasion.IsEmpty()?TEXT("-"):*G.Occasion);
@@ -696,7 +697,7 @@ void AOKStreetSocialScene::TickSong(double Now){
 // The song part of the right panel: the switch, what is being prepared, the offer and the lyrics while she sings.
 void AOKStreetSocialScene::BuildSongRow(TSharedRef<SVerticalBox> Box){
  auto& S=*State;auto& G=S.Song;if(G.Endpoint.IsEmpty()||!S.TtsEnabled)return;const TWeakObjectPtr<AOKStreetSocialScene> Weak(this);
- const FString Name=S.Manifest.Characters.IsValidIndex(G.Girl)?S.Manifest.Characters[G.Girl].Name:FString();
+ const FString Name=S.Manifest.Characters.IsValidIndex(G.Girl)?OKStreetScriptedName(S.Manifest.Characters[G.Girl].Name):FString();
  Box->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(4)[SNew(SButton).ButtonStyle(OKStreetGlassButton()).Text(FText::FromString(G.Enabled?OKT(TEXT("ui.song.enabled")):OKT(TEXT("ui.song.disabled"))))
   .OnClicked_Lambda([Weak](){if(Weak.IsValid()){auto& L=Weak->State->Song;L.Enabled=!L.Enabled;L.NextCheck=0;Weak->SongSave();Weak->RefreshUI();}return FReply::Handled();})];
  FString Line;

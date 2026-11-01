@@ -6,6 +6,8 @@ bool AOKStreetSocialScene::ContactReady(int32 Character) const {
 }
 bool AOKStreetSocialScene::ContactLover(int32 Character) const {return State&&State->Manifest.Characters.IsValidIndex(Character)&&OKStreetViewRelation(State->Store,OKStreetStableId(State->Manifest.Characters[Character]),State->Manifest.TalkBudget).Stage==TEXT("lover");}
 bool AOKStreetSocialScene::ContactIdle() const {if(!State)return false;const auto& S=*State;return S.PrivateGirl==INDEX_NONE&&S.Pair.Partner==INDEX_NONE&&S.Facility==INDEX_NONE&&S.Companion==INDEX_NONE&&!OKStreetConversationBusy(S.Node!=INDEX_NONE,S.CollectedActive,S.RelationshipPending,S.TouchActive);}
+// Only sitting and talking with this girl in the way of a contact: nothing else going on (a photo being taken, a meal).
+bool AOKStreetSocialScene::SeatedWith(int32 Girl) const {if(!State)return false;const auto& S=*State;return S.Pair.Partner==Girl&&S.Pair.Conversation()&&!S.Pair.CapturePending&&S.PrivateGirl==INDEX_NONE&&S.Facility==INDEX_NONE&&S.Companion==INDEX_NONE&&!OKStreetConversationBusy(S.Node!=INDEX_NONE,S.CollectedActive,S.RelationshipPending,S.TouchActive);}
 TArray<FVector> AOKStreetSocialScene::ContactRoute(const FVector& From,const FVector& To) const {
  if(FMath::Abs(From.Z-To.Z)<150.f){auto Grid=GridRoute(From,To);if(Grid.Num()>=2)return Grid;}
  TArray<FOKStreetPointData> Shared;OKStreetWaypoints(Shared);TArray<FVector> Points;for(const auto& P:Shared)Points.Add(P.Position);
