@@ -35,6 +35,7 @@ public:
     bool HSceneApplyTalk(const TSharedPtr<FJsonObject>& Verdict);
     bool HSceneSpeak(const FString& Path);
     bool HSceneSpeaking() const;
+    bool HSceneHasReaction() const;
     bool IsReady() const {return Ready;}
     bool IsFinished() const {return Finished;}
     FString Error;

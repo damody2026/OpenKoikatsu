@@ -370,7 +370,13 @@ bool AOKStreetSocialScene::TickPrivate(double Now){
   // Talk while it happens: his line from the H panel goes to her as free talk (she is the partner while the scene is
   // open, FreeTalkPartner), with what she is in the middle of; her answer is shown on the panel.
   FString Line,Context;bool System=false;
-  if(!S.FreeTalkBusy&&S.FreeTalkDraft.IsEmpty()&&!HerReplyUnspoken()&&S.PrivateMode->HSceneTakeLine(Line,Context,System)){S.PrivateTalkContext=Context;S.FreeTalkDraft=Line;S.SystemNote=System;SendFreeTalk();}
+  // Her reaction to a touch is out of date once he does something new (a kiss while she still talks about her chest):
+  // the line she is saying ends, the rest is dropped and the new happening is sent now, as the original's voice follows
+  // each action. His words and her answers to them are never cut.
+  if(S.PrivateReplyIsReaction&&!S.FreeTalkBusy&&S.FreeTalkDraft.IsEmpty()&&HerReplyUnspoken()&&S.PrivateMode->HSceneHasReaction()){
+   UE_LOG(LogTemp,Display,TEXT("H scene: %d unsaid lines of her last reaction dropped for a newer happening"),S.FreeTalkSpeechLines.Num()-S.FreeTalkSpeechPlayed);
+   S.FreeTalkSpeechPlayed=S.FreeTalkSpeechLines.Num();}
+  if(!S.FreeTalkBusy&&S.FreeTalkDraft.IsEmpty()&&!HerReplyUnspoken()&&S.PrivateMode->HSceneTakeLine(Line,Context,System)){S.PrivateTalkContext=Context;S.FreeTalkDraft=Line;S.SystemNote=System;S.PrivateReplyIsReaction=System;SendFreeTalk();}
   if(S.FreeTalkCaptionHer!=S.PrivateShownLine){S.PrivateShownLine=S.FreeTalkCaptionHer;S.PrivateMode->HSceneShowLine(S.FreeTalkCaptionHer);}
   return true;
  }

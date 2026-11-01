@@ -197,6 +197,7 @@ bool AOKInteractionMode::HSceneSpeak(const FString& Path){
     if(Ok&&Controller->HPanel)Controller->HPanel->SpokeLine();
     return Ok;
 }
+bool AOKInteractionMode::HSceneHasReaction() const{return Controller&&Controller->HPanel&&Controller->HPanel->HasReaction();}
 bool AOKInteractionMode::HSceneSpeaking() const{return Controller&&IsValid(Controller->PreviewActor)&&Controller->PreviewActor->IsSpeaking()&&!Controller->PreviewActor->bHBreath;}
 void AOKInteractionMode::Fail(const FString& Why){Error=Why;UE_LOG(LogTemp,Error,TEXT("Shared interaction mode: %s"),*Why);Exit(true);}
 void AOKInteractionMode::Tick(float Delta){
