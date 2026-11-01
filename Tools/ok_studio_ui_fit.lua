@@ -45,7 +45,7 @@ local function check(name)
 end
 check("shell")
 local floats = { "timeline", "mmd", "cards", "scenes", "quick", "poselib", "effects", "maps", "color", "settings", "shot", "export",
-  "report", "resources", "backups", "recent", "stories", "material", "animctl", "help", "dialog", "bgm", "outside" }
+  "report", "resources", "backups", "recent", "stories", "material", "animctl", "help", "dialog", "bgm", "outside", "voice" }
 for _, id in ipairs(floats) do
   call("ui_fit", { open = id })
   check("float_" .. id)

@@ -489,6 +489,18 @@ namespace
 					C.HandLeft = Shape((*Hands)[0]->AsNumber());
 					C.HandRight = Shape((*Hands)[1]->AsNumber());
 				}
+				// The voice list (VoiceCtrl: group, category, no each, and its repeat); Studio says it once the scene is open.
+				const TArray<TSharedPtr<FJsonValue>>* Voices = nullptr;
+				if (O->TryGetArrayField(TEXT("voices"), Voices))
+					for (const TSharedPtr<FJsonValue>& V : *Voices)
+					{
+						const TArray<TSharedPtr<FJsonValue>>& E = V->AsArray();
+						if (E.Num() == 3) C.Voices.Add({ int32(E[0]->AsNumber()), int32(E[1]->AsNumber()), int32(E[2]->AsNumber()) });
+					}
+				double VoiceRepeat = 1.;
+				O->TryGetNumberField(TEXT("voice_repeat"), VoiceRepeat);
+				C.VoiceRepeat = FMath::Clamp(int32(VoiceRepeat), 0, 2);
+				C.bVoicePlay = !C.Voices.IsEmpty();
 				const TArray<TSharedPtr<FJsonValue>>* Anime = nullptr;
 				if (O->TryGetArrayField(TEXT("anime"), Anime) && Anime->Num() == 3 && (*Anime)[0]->AsNumber() >= 0)
 				{

@@ -221,6 +221,8 @@ public:
 	/** Whether the BGM / outside sound is audible now (still loading or ended: false). */
 	bool IsBgmPlaying() const;
 	bool IsOutsideSoundPlaying() const;
+	/** The voice list entry character `Id` is speaking (-1: none, still loading or ended). */
+	int32 VoicePlayingIndex(int32 Id) const;
 
 	/** Screenshot through the current view into UserData/Studio/screenshot (returns the file; empty on failure). */
 	FString Screenshot(int32 Width, int32 Height, bool bTransparent = false);
@@ -366,6 +368,21 @@ private:
 	FStudioSound StudioBgm, StudioOutside;
 	void UpdateStudioSound(FStudioSound& Sound, const FString& File, bool bPlay, bool bRepeat);
 	void StopStudioSounds();
+	/** A character's voice list playing (FOKSceneCharacter::Voices): the entry, its decoded sound and whether the
+	 *  character has started saying it. */
+	struct FCharacterVoice
+	{
+		int32 Index = 0;
+		int32 Start = 0;
+		FString File;
+		TSharedPtr<const struct FKKSpeechPcm, ESPMode::ThreadSafe> Pcm;
+		TSharedPtr<struct FOKStudioSoundLoad, ESPMode::ThreadSafe> Load;
+		TWeakObjectPtr<class AKKPreviewActor> Speaker;
+		bool bStarted = false;
+		bool bEnded = false;
+	};
+	TMap<int32, FCharacterVoice> CharacterVoices;
+	void UpdateCharacterVoices();
 	void UpdateViewer();
 	void SyncNow();
 	/** Whether a shown preview still draws stand-in materials or runtime shaders are compiling (pictures would miss it). */

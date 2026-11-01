@@ -93,6 +93,7 @@ void SOKStudioPanel::RegisterFloats()
 	AddFloat(TEXT("animctl"), TEXT("動畫控制器"), FMargin(470.f, 400.f, 300.f, 150.f), [this] { return BuildAnimController(); });
 	AddFloat(TEXT("bgm"), TEXT("背景音樂"), FMargin(142.f, 36.f, 280.f, 420.f), [this] { return BuildBgm(); });
 	AddFloat(TEXT("outside"), TEXT("外部音源"), FMargin(142.f, 36.f, 320.f, 360.f), [this] { return BuildOutsideSound(); });
+	AddFloat(TEXT("voice"), TEXT("語音"), FMargin(142.f, 36.f, 600.f, 420.f), [this] { return BuildVoice(); });
 	AddFloat(TEXT("help"), TEXT("說明"), FMargin(640.f, 120.f, 300.f, 140.f), [this]
 	{
 		return SNew(SVerticalBox)
@@ -250,6 +251,14 @@ void SOKStudioPanel::TickUi(float DeltaTime)
 		FString Now = FString::FromInt(Game->SelectedId);
 		if (Game->SceneActor) for (const TPair<FString, float>& P : Game->SceneActor->BlendControlsOf(Game->SelectedId)) Now += TEXT("|") + P.Key;
 		if (Now != AnimCtlShown) { AnimCtlShown = Now; DeferFloat(TEXT("animctl")); }
+	}
+	// The voice window shows the selected character's list and what it browses.
+	if (IsFloatOpen(TEXT("voice")))
+	{
+		FString Now = FString::Printf(TEXT("%d|%d|%d|%d"), Game->SelectedId, VoiceGroupPick, VoiceCategoryPick, VoiceListPick);
+		if (const FOKSceneObject* O = Game->Document->Find(Game->SelectedId); O && O->Kind == EOKSceneObjectKind::Character)
+			for (const FOKSceneVoice& V : O->Character.Voices) Now += FString::Printf(TEXT("|%d.%d.%d"), V.Group, V.Category, V.No);
+		if (Now != VoiceShown) { VoiceShown = Now; DeferFloat(TEXT("voice")); }
 	}
 	// The window title: the scene and a star while it has unsaved changes.
 	if (GEngine && GEngine->GameViewport)
@@ -895,6 +904,129 @@ TSharedRef<SWidget> SOKStudioPanel::BuildOutsideSound()
 			+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)[CheckBox(TEXT("循環"), [Sound] { const FOKSceneSound* S = Sound(); return S && S->bOutsideRepeat; }, [this, Sound](bool B) { if (FOKSceneSound* S = Sound()) { S->bOutsideRepeat = B; Changed(); } })]
 		]
 		+ SVerticalBox::Slot().FillHeight(1.f)[SNew(SBorder).BorderImage(Brush(ListArea())).Padding(3.f)[SNew(SScrollBox) + SScrollBox::Slot()[SoundRows]]];
+}
+
+TSharedRef<SWidget> SOKStudioPanel::BuildVoice()
+{
+	// Studio's voice window: personality → category → voice (a click adds it to the selected character's list), and
+	// the list with play / stop, repeat, remove, move up / down and clear. The character says it with its mouth moving.
+	using namespace OKStudioStyle;
+	const FOKStudioCatalog& C = FOKStudioCatalog::Get();
+	const int32 Id = Game.IsValid() ? Game->SelectedId : -1;
+	auto Char = [this, Id]() -> FOKSceneCharacter*
+	{
+		FOKSceneObject* O = Game.IsValid() ? Game->Document->Find(Id) : nullptr;
+		return O && O->Kind == EOKSceneObjectKind::Character ? &O->Character : nullptr;
+	};
+	const FOKSceneObject* Selected = Game.IsValid() ? Game->Document->Find(Id) : nullptr;
+	if (!Char())
+		return OKStudioStyle::Label(FText::FromString(TEXT("先選擇一個角色。")), 10.f, TextHint());
+	if (C.Voices.IsEmpty())
+	{
+		TSharedRef<STextBlock> Hint = OKStudioStyle::Label(FText::FromString(TEXT("基礎庫沒有語音清單：執行 ok-extract <遊戲> --oklib studio-voices <基礎庫>。")), 10.f, TextHint());
+		Hint->SetAutoWrapText(true);
+		return Hint;
+	}
+	auto Column = [](const TSharedRef<SVerticalBox>& Rows) -> TSharedRef<SWidget> { return SNew(SBorder).BorderImage(Brush(ListArea())).Padding(3.f)[SNew(SScrollBox) + SScrollBox::Slot()[Rows]]; };
+	// Long lines (voice texts) end in an ellipsis, the whole line in the tooltip.
+	auto Row = [](TAttribute<FText> Text, TFunction<void()> Click, TAttribute<bool> bOn, bool bEnabled = true) -> TSharedRef<SWidget>
+	{
+		return SNew(SBox).HeightOverride(18.f).ToolTipText(Text)
+		[
+			Fill(bOn, ButtonFill(),
+				SNew(SButton).ButtonStyle(&FlatButton()).IsEnabled(bEnabled).HAlign(HAlign_Left).VAlign(VAlign_Center).ContentPadding(FMargin(3.f, 0.f))
+				.OnClicked_Lambda([Click] { if (Click) Click(); return FReply::Handled(); })
+				[SNew(STextBlock).Font(Font(10.f)).ColorAndOpacity(OKStudioStyle::Text()).OverflowPolicy(ETextOverflowPolicy::Ellipsis).AddMetaData<FTagMetaData>(TEXT("Ellipsis")).Text(Text)])
+		];
+	};
+	TSharedRef<SVerticalBox> GroupRows = SNew(SVerticalBox), CategoryRows = SNew(SVerticalBox), VoiceRows = SNew(SVerticalBox), ListRows = SNew(SVerticalBox);
+	for (const FOKStudioCatalogGroup& G : C.VoiceGroups)
+	{
+		const int32 No = G.Id;
+		GroupRows->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)[Row(FText::FromString(G.Name), [this, No] { VoiceGroupPick = No; VoiceCategoryPick = 0; }, VoiceGroupPick == No)];
+	}
+	for (const FOKStudioCatalogGroup& G : C.VoiceCategories)
+	{
+		if (G.Group != VoiceGroupPick) continue;
+		const int32 No = G.Id;
+		CategoryRows->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)[Row(FText::FromString(G.Name), [this, No] { VoiceCategoryPick = No; }, VoiceCategoryPick == No)];
+	}
+	int32 Missing = 0;
+	for (const FOKStudioVoice& V : C.Voices)
+	{
+		if (V.Group != VoiceGroupPick || V.Category != VoiceCategoryPick) continue;
+		const bool bThere = !C.VoiceSound(V.Group, V.Category, V.No).IsEmpty();
+		Missing += bThere ? 0 : 1;
+		const FOKSceneVoice Entry{ V.Group, V.Category, V.No };
+		VoiceRows->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)
+			[Row(FText::FromString(FString::Printf(TEXT("%d %s"), V.No, *V.Name)), [this, Char, Entry] { if (FOKSceneCharacter* Ch = Char()) { Ch->Voices.Add(Entry); VoiceListPick = Ch->Voices.Num() - 1; Changed(); } }, false, bThere)];
+	}
+	const TArray<FOKSceneVoice>& VoiceList = Char()->Voices;
+	for (int32 I = 0; I < VoiceList.Num(); ++I)
+	{
+		const FOKStudioVoice* V = C.FindVoice(VoiceList[I].Group, VoiceList[I].Category, VoiceList[I].No);
+		const FString Name = V ? V->Name : FString::Printf(TEXT("（不在清單 %d/%d/%d）"), VoiceList[I].Group, VoiceList[I].Category, VoiceList[I].No);
+		ListRows->AddSlot().AutoHeight().Padding(0.f, 0.f, 0.f, 1.f)
+			[Row(TAttribute<FText>::CreateLambda([this, Id, I, Name] { return FText::FromString(FString::Printf(TEXT("%s%d. %s"), Game.IsValid() && Game->VoicePlayingIndex(Id) == I ? TEXT("▶ ") : TEXT(""), I + 1, *Name)); }),
+				[this, I] { VoiceListPick = I; }, VoiceListPick == I, V && !C.VoiceSound(V->Group, V->Category, V->No).IsEmpty())];
+	}
+	if (VoiceList.IsEmpty())
+	{
+		TSharedRef<STextBlock> Hint = OKStudioStyle::Label(FText::FromString(TEXT("點左邊的語音加入清單。")), 10.f, TextHint());
+		Hint->SetAutoWrapText(true);
+		ListRows->AddSlot().AutoHeight()[Hint];
+	}
+	// The list's edits keep the picked entry on the same voice.
+	auto Edit = [this, Char](TFunction<void(TArray<FOKSceneVoice>&, int32&)> Do) { if (FOKSceneCharacter* Ch = Char()) { Do(Ch->Voices, VoiceListPick); Ch->VoiceStart = FMath::Clamp(Ch->VoiceStart, 0, FMath::Max(Ch->Voices.Num() - 1, 0)); Changed(); } };
+	static const TCHAR* RepeatNames[] = { TEXT("播完停止"), TEXT("全部循環"), TEXT("單句循環") };
+	TSharedRef<STextBlock> State = OKStudioStyle::Label(TAttribute<FText>::CreateLambda([this, Id, Char]
+	{
+		const FOKSceneCharacter* Ch = Char();
+		if (!Ch || !Game.IsValid()) return FText();
+		const int32 Now = Game->VoicePlayingIndex(Id);
+		return FText::FromString(FString::Printf(TEXT("%d 句：%s"), Ch->Voices.Num(), Now >= 0 ? *FString::Printf(TEXT("說第 %d 句"), Now + 1) : Ch->bVoicePlay ? TEXT("準備中／已播完") : TEXT("停止")));
+	}), 10.f);
+	State->SetAutoWrapText(true);
+	TSharedRef<SVerticalBox> Box = SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 3.f)[OKStudioStyle::Label(FText::FromString(TEXT("目前角色：") + (Selected ? Selected->Name : FString())), 10.f)]
+		+ SVerticalBox::Slot().FillHeight(1.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.8f).Padding(0.f, 0.f, 2.f, 0.f)[Column(GroupRows)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Column(CategoryRows)]
+			+ SHorizontalBox::Slot().FillWidth(1.4f).Padding(0.f, 0.f, 4.f, 0.f)[Column(VoiceRows)]
+			+ SHorizontalBox::Slot().FillWidth(1.4f)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 2.f)[State]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 2.f)
+				[
+					SNew(SHorizontalBox)
+					// 播放 starts from the picked entry (or the first).
+					+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("播放")), [this, Char] { if (FOKSceneCharacter* Ch = Char(); Ch && Ch->Voices.Num()) { Ch->VoiceStart = Ch->Voices.IsValidIndex(VoiceListPick) ? VoiceListPick : 0; Ch->bVoicePlay = true; Changed(); } }, 0.f, 20.f,
+						TAttribute<bool>::CreateLambda([Char] { const FOKSceneCharacter* Ch = Char(); return Ch && Ch->bVoicePlay; }), 10.f)]
+					+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("停止")), [this, Char] { if (FOKSceneCharacter* Ch = Char()) { Ch->bVoicePlay = false; Changed(); } }, 0.f, 20.f, false, 10.f)]
+					+ SHorizontalBox::Slot().FillWidth(1.2f)[Button(TAttribute<FText>::CreateLambda([Char] { const FOKSceneCharacter* Ch = Char(); return FText::FromString(RepeatNames[Ch ? FMath::Clamp(Ch->VoiceRepeat, 0, 2) : 1]); }),
+						[this, Char] { if (FOKSceneCharacter* Ch = Char()) { Ch->VoiceRepeat = (FMath::Clamp(Ch->VoiceRepeat, 0, 2) + 1) % 3; Changed(); } }, 0.f, 20.f, false, 10.f)]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 2.f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("移除")), [Edit] { Edit([](TArray<FOKSceneVoice>& L, int32& P) { if (L.IsValidIndex(P)) { L.RemoveAt(P); P = FMath::Min(P, L.Num() - 1); } }); }, 0.f, 20.f, false, 10.f)]
+					+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("上移")), [Edit] { Edit([](TArray<FOKSceneVoice>& L, int32& P) { if (P > 0 && L.IsValidIndex(P)) { L.Swap(P, P - 1); --P; } }); }, 0.f, 20.f, false, 10.f)]
+					+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 2.f, 0.f)[Button(FText::FromString(TEXT("下移")), [Edit] { Edit([](TArray<FOKSceneVoice>& L, int32& P) { if (P >= 0 && P + 1 < L.Num()) { L.Swap(P, P + 1); ++P; } }); }, 0.f, 20.f, false, 10.f)]
+					+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("清空")), [Edit] { Edit([](TArray<FOKSceneVoice>& L, int32& P) { L.Reset(); P = -1; }); }, 0.f, 20.f, false, 10.f)]
+				]
+				+ SVerticalBox::Slot().FillHeight(1.f)[Column(ListRows)]
+			]
+		];
+	if (Missing)
+	{
+		TSharedRef<STextBlock> Hint = OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("這個分類有 %d 句尚未轉換（灰色）。"), Missing)), 9.f, TextHint());
+		Hint->SetAutoWrapText(true);
+		Box->AddSlot().AutoHeight().Padding(0.f, 3.f, 0.f, 0.f)[Hint];
+	}
+	return Box;
 }
 
 TSharedRef<SWidget> SOKStudioPanel::BuildMaterialEditor()

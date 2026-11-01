@@ -26,7 +26,7 @@
 |---|---|---|---|
 | `studio_launch` | — | `scene?`、`width?`、`height?`、`no_build?`（`-NoBuild`）、`options?`（`--` 後的 Unreal 參數）、`timeout_s?`（預設 120） | `{pid, port, seconds}` |
 | `studio_stop` | `cmd` | 無（送 `{"id":"app.quit"}`，不殺程序） | `{}` |
-| `studio_state` | `state` | 無 | `scene_file, dirty, selection, primary, objects[{id,parent,name,kind,visible,attach_bone,location,rotation,scale,error?}], ui{commands...}, busy, timeline{time,duration,playing}, sound{bgm,bgm_play,bgm_repeat,bgm_file,bgm_playing,outside,outside_play,outside_repeat,outside_file,outside_playing}` |
+| `studio_state` | `state` | 無 | `scene_file, dirty, selection, primary, objects[{id,parent,name,kind,visible,attach_bone,location,rotation,scale,error?；角色另有 voices,voice_play,voice_repeat,voice_playing}], ui{commands...}, busy, timeline{time,duration,playing}, sound{bgm,bgm_play,bgm_repeat,bgm_file,bgm_playing,outside,outside_play,outside_repeat,outside_file,outside_playing}` |
 | `studio_inspect` | `inspect` | `id` | `{object}` |
 | `studio_catalog_search` | `catalog_search` | `query`（空白分隔、全部符合；`-字` 排除）、`kinds?`（`item effect map anim pose card`）、`limit?` | `{results[{kind,key,name,path?}]}` |
 | `studio_spawn` | `spawn` | `kind`（`character item light camera effect folder`）、`card?`、`item?`（`group/category/no`）、`effect?`、`light_type?`（`directional point spot`）、`parent?`、`bone?`、`name?`、`location?`、`rotation?`、`scale?` | `{id}` |

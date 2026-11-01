@@ -81,6 +81,17 @@ struct FOKStudioBgm
 	FString File;
 };
 
+/** Studio character voice (Voice sheets of studio_voices.json): its sound is the library's studio/voice/<File>.ogg
+ *  (ok-extract --oklib studio-voices). Group is the personality. */
+struct FOKStudioVoice
+{
+	int32 Group = 0;
+	int32 Category = 0;
+	int32 No = 0;
+	FString Name;
+	FString File;
+};
+
 /** Studio character attach point (AccessoryPoint sheet): the transform scene children on that slot hang on. */
 struct FOKStudioAccessoryPoint
 {
@@ -167,6 +178,14 @@ public:
 	const FOKStudioBgm* FindBgm(int32 No) const;
 	/** BGM `No`'s Ogg file, empty when the list or the converted file lacks it. */
 	FString BgmSound(int32 No) const;
+	/** Studio voice lists (studio_voices.json): groups (personalities), categories (Group: the voice group), voices. */
+	TArray<FOKStudioCatalogGroup> VoiceGroups;
+	TArray<FOKStudioCatalogGroup> VoiceCategories;
+	TArray<FOKStudioVoice> Voices;
+	const FOKStudioVoice* FindVoice(int32 Group, int32 Category, int32 No) const;
+	/** That voice's Ogg file, empty when the list or the converted file lacks it. */
+	FString VoiceSound(int32 Group, int32 Category, int32 No) const;
+	void LoadVoices(const FString& File);
 	/** Eyes pattern names (cha_eyeset rows) and Studio hand pattern names per side (0 left, 1 right; the HandAnime clip). */
 	TMap<int32, FString> EyeNames;
 	TMap<int32, FString> HandNames[2];

@@ -102,12 +102,31 @@ pub struct Catalog {
     /// (studio-sounds).
     #[serde(default)]
     pub bgm: Vec<Bgm>,
+    /// The voice lists, written apart as studio_voices.json (studio-voices): too long for this file.
+    #[serde(skip)]
+    pub voices: VoiceCatalog,
 }
 /// Studio BGM (BGM sheet: no, name, bundle, clip); SceneInfo.bgmCtrl.no picks one.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Bgm { pub no: i32, pub name: String, pub bundle: String, pub file: String }
 
+/// Studio character voice (Voice_<group>_<category>_<sheet>: no, group, category, name, bundle, clip); a character's
+/// VoiceCtrl list names one by group (personality), category and no. Its sound is `studio/voice/<file>.ogg`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct Voice { pub group: i32, pub category: i32, pub no: i32, pub name: String, pub bundle: String, pub file: String }
+
+/// studio_voices.json: the voice groups (VoiceGroup: personalities), their categories (VoiceCategory_<x>_<group>) and
+/// voices.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct VoiceCatalog {
+    pub format: String,
+    pub groups: Vec<Group>,
+    pub categories: Vec<Category>,
+    pub voices: Vec<Voice>,
+}
+
 pub const FILE_NAME: &str = "studio_items.json";
+pub const VOICE_FILE_NAME: &str = "studio_voices.json";
 
 /// ExcelData sheets of one bundle: (MonoBehaviour name, rows of cells).
 pub fn sheets(bytes: Vec<u8>) -> Vec<(String, Vec<Vec<String>>)> {
@@ -165,6 +184,7 @@ pub fn catalog(game: &Path) -> Catalog {
     let mut filters = BTreeMap::new();
     let mut hand_names = BTreeMap::new();
     let mut bgm = BTreeMap::new();
+    let (mut voice_groups, mut voice_categories, mut voices) = (BTreeMap::new(), BTreeMap::new(), BTreeMap::new());
     for file in files {
         let Ok(bytes) = crate::gamefs::read(&file) else { continue; };
         for (name, rows) in sheets(bytes) {
@@ -200,6 +220,12 @@ pub fn catalog(game: &Path) -> Catalog {
                     }
                     "Light" => { lights.insert(no, Light { no, name: cell(r, 1), bundle: game_bundle(&cell(r, 3)), prefab: cell(r, 4), model: String::new() }); }
                     "BGM" => { bgm.insert(no, Bgm { no, name: cell(r, 1), bundle: game_bundle(&cell(r, 2)), file: cell(r, 3) }); }
+                    "VoiceGroup" => { voice_groups.insert(no, Group { id: no, name: cell(r, 1) }); }
+                    "VoiceCategory" => { let group = suffix(&name).unwrap_or_default(); voice_categories.insert((group, no), Category { group, id: no, name: cell(r, 1) }); }
+                    "Voice" => {
+                        let (group, category) = (num(r.get(1)).unwrap_or_default(), num(r.get(2)).unwrap_or_default());
+                        voices.insert((group, category, no), Voice { group, category, no, name: cell(r, 3), bundle: game_bundle(&cell(r, 4)), file: cell(r, 5) });
+                    }
                     _ => {}
                 }
             }
@@ -219,6 +245,12 @@ pub fn catalog(game: &Path) -> Catalog {
         accessory_points: accessory_points.into_values().filter(|p: &AccessoryPoint| !p.key.is_empty()).collect(),
         filters: filters.into_values().filter(|f: &Filter| !f.bundle.is_empty() && !f.file.is_empty()).collect(),
         bgm: bgm.into_values().filter(|b: &Bgm| !b.bundle.is_empty() && !b.file.is_empty()).collect(),
+        voices: VoiceCatalog {
+            format: "ok-studio-voices-1".into(),
+            groups: voice_groups.into_values().collect(),
+            categories: voice_categories.into_values().collect(),
+            voices: voices.into_values().filter(|v: &Voice| !v.bundle.is_empty() && !v.file.is_empty()).collect(),
+        },
     }
 }
 

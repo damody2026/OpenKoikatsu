@@ -747,6 +747,15 @@ U16～U22 做完後，把各階段記錄裡「還沒做」的項目、第 3 節�
 | U27 場景比對剩餘 | `83572034_p1` 中央的玻璃房間不見、兩側螢幕內容不同；`83283571_p1` 原生整體偏粉紅（AmplifyColor LUT 或雲層零件）；光束道具ビーム・扇本身的放射光 | 玻璃房間是原生截圖工具的假差異；偏粉紅已修（cube atlas 面上下顛倒）；齒輪的放射光是 SunShafts，queue > 2500 的零件不在原生深度貼圖裡、要當光源，已修（下方記錄）；舞台前地板偏亮未查 |
 | U28 效能與小視窗 | `run_ok_studio_perf.lua` 只開一個 Unreal 時量；1280×720 視窗下逐窗檢查不出框 | 小視窗**已做**（下方記錄）；效能未量（等全機只剩一個 Unreal） |
 | U29 音效選單 | 左上「音效」主選單（第 3.1 節規格）只是空殼：Studio 背景音樂（BGMCtrl）與外部音源（OutsideSoundCtrl）的播放、循環、隨場景存讀，KStudio 場景帶進來 | **已做**（下方記錄）；KKS 的 Studio 沒有環境音清單（ENVCtrl 只讀過不用）；KKPE 外掛資料見記錄 |
+| U30 角色語音 | 角色選單的「語音」（第 3.8 節 `hs2/55_voice.png`）：性格→分類→語音三欄，加入角色的播放清單；清單的播放、停止、循環方式、移除、上移／下移、清空；角色說話時嘴型跟著動；KStudio 場景的 voiceCtrl 帶進來 | **已做**（下方記錄）；語音檔 1.9 GB 未進版控（等協調者決定） |
+
+**U30 角色語音記錄（2026-11-01）**：
+
+- 轉換：`ok-extract <遊戲> --oklib studio-voices <base_v1>` 讀 Studio 的 VoiceGroup（40 個性格）、VoiceCategory（`VoiceCategory_<x>_<性格>`）、`Voice_<性格>_<分類>_<n>` 表（編號、性格、分類、台詞、bundle、clip），寫 `studio_voices.json`（另存一檔，8,280 句放進 studio_items.json 太長），clip 寫成 `base_v1/studio/voice/<clip>.ogg`。40 個 `sound/data/pcm/cXX/h/01.unity3d`（共 6.6 GB）每個只載一次、8 執行緒約 5 分鐘；BGM 也改用同一個「一個 bundle 取多個 clip」的函式。寫出 8,020 句、1.94 GB；260 句和 `kks_bgm_14` 一樣是 fsbex 的 `failed to encode Vorbis stream`，清單裡顯示灰色。
+- 場景：角色多存 `Voices`（性格、分類、編號）、`VoiceRepeat`（0 播完停止、1 全部循環、2 單句循環，Studio 的 None／All／Select）、`bVoicePlay`、`VoiceStart`（從清單第幾句開始）。播放用角色自己的 `PlaySpeechPcm`（嘴型跟著音量動）；解碼在背景執行緒；不在基礎庫的句子跳過；匯出影片與靜音時不出聲；改清單不重建角色。
+- KStudio 匯入：OCIChar 的 voiceCtrl（清單每項三個 int、之後一個 repeat）原本讀過就丟，現在帶進來，有清單的角色開場就說。本機 7,652 個場景有 1,059 個角色帶語音（repeat 0：68、1：944、2：47）。
+- 語音窗（角色選單「語音」，浮窗 `voice`）：左邊性格、分類、語音三欄（點語音加到所選角色清單；沒轉出的灰色），右邊清單（說到的那句前面標 ▶）、播放（從選中那句開始）、停止、循環方式（點一下輪換）、移除、上移、下移、清空。長台詞以省略號截斷，完整台詞在提示。
+- 控制通道：`state` 的角色物件多 `voices`（句數）、`voice_play`、`voice_repeat`、`voice_playing`（正在說第幾句，-1 沒有）；清單用 `patch` 改（`{"Character": {"Voices": [...], "bVoicePlay": true}}`）。驗證：`koikatu_cs0000157` 匯入後角色開口、窗內停止／播放／循環／清空、點語音加入清單、兩句清單 repeat 0 依序說完後停、存讀一致；`ok_studio_ui_fit.lua` 加入 `voice`，1280×720 為 0 項。
 
 **U29 音效記錄（2026-11-01）**：
 

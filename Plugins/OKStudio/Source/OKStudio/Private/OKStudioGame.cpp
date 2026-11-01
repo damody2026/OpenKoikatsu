@@ -1274,6 +1274,89 @@ void UOKStudioGame::StopStudioSounds()
 		if (S->Audio.IsValid()) S->Audio->Stop();
 		*S = FStudioSound();
 	}
+	for (TPair<int32, FCharacterVoice>& V : CharacterVoices)
+		if (V.Value.bStarted && V.Value.Speaker.IsValid()) V.Value.Speaker->StopSpeech();
+	CharacterVoices.Reset();
+}
+
+int32 UOKStudioGame::VoicePlayingIndex(int32 Id) const
+{
+	const FCharacterVoice* V = CharacterVoices.Find(Id);
+	return V && V->bStarted && V->Speaker.IsValid() && V->Speaker->IsSpeaking() ? V->Index : -1;
+}
+
+void UOKStudioGame::UpdateCharacterVoices()
+{
+	// Studio's VoiceCtrl: each character says its voice list in order from the start entry, the mouth following the
+	// sound; at the end repeat 1 goes round again, 2 says the start entry again, 0 stops. Missing voices are skipped.
+	const FOKStudioCatalog& C = FOKStudioCatalog::Get();
+	TSet<int32> Playing;
+	for (const FOKSceneObject& O : Document->Objects)
+	{
+		const FOKSceneCharacter& Ch = O.Character;
+		if (O.Kind != EOKSceneObjectKind::Character || !Ch.bVoicePlay || Ch.Voices.IsEmpty() || bMuteSound || IsExporting()) continue;
+		AKKPreviewActor* P = SceneActor ? SceneActor->PreviewOf(O.Id) : nullptr;
+		if (!P) continue;
+		Playing.Add(O.Id);
+		FCharacterVoice& V = CharacterVoices.FindOrAdd(O.Id);
+		const int32 Start = FMath::Clamp(Ch.VoiceStart, 0, Ch.Voices.Num() - 1);
+		if (V.Speaker.Get() != P || V.Start != Start) { if (V.bStarted && V.Speaker.IsValid()) V.Speaker->StopSpeech(); V = FCharacterVoice(); V.Index = V.Start = Start; V.Speaker = P; }
+		if (V.bEnded) continue;
+		if (V.bStarted)
+		{
+			if (P->IsSpeaking()) { if (P->SpeechAudio) P->SpeechAudio->SetVolumeMultiplier(FMath::Clamp(SoundVolume, 0.f, 2.f)); continue; }
+			// Said to the end: the next entry.
+			V.bStarted = false;
+			if (Ch.VoiceRepeat != 2 && ++V.Index >= Ch.Voices.Num()) { V.Index = 0; V.bEnded = Ch.VoiceRepeat == 0; }
+			if (V.bEnded) continue;
+		}
+		V.Index = FMath::Clamp(V.Index, 0, Ch.Voices.Num() - 1);
+		const FOKSceneVoice& E = Ch.Voices[V.Index];
+		const FString Path = C.VoiceSound(E.Group, E.Category, E.No);
+		if (Path.IsEmpty())
+		{
+			// Not in the library: the next one (the whole list missing ends it).
+			const bool bAnyThere = Ch.Voices.ContainsByPredicate([&C](const FOKSceneVoice& X) { return !C.VoiceSound(X.Group, X.Category, X.No).IsEmpty(); });
+			if (!bAnyThere || Ch.VoiceRepeat == 2) V.bEnded = true;
+			else if (++V.Index >= Ch.Voices.Num()) { V.Index = 0; V.bEnded = Ch.VoiceRepeat == 0; }
+			continue;
+		}
+		if (V.File != Path)
+		{
+			V.File = Path;
+			V.Pcm.Reset();
+			TSharedPtr<FOKStudioSoundLoad, ESPMode::ThreadSafe> Load = MakeShared<FOKStudioSoundLoad, ESPMode::ThreadSafe>();
+			V.Load = Load;
+			Async(EAsyncExecution::ThreadPool, [Load, Path]
+			{
+				FString Error;
+				if (!OKStudioLoadAudioFile(Path, Load->Pcm, Error)) UE_LOG(LogTemp, Warning, TEXT("OK studio: voice %s failed to load: %s"), *Path, *Error);
+				Load->bDone = true;
+			});
+		}
+		if (V.Load)
+		{
+			if (!V.Load->bDone) continue;
+			V.Pcm = V.Load->Pcm;
+			V.Load.Reset();
+		}
+		FString Error;
+		if (!V.Pcm || !P->PlaySpeechPcm(V.Pcm, 1.f, Error))
+		{
+			if (!Error.IsEmpty()) UE_LOG(LogTemp, Warning, TEXT("OK studio: voice %s: %s"), *Path, *Error);
+			V.bEnded = true;
+			continue;
+		}
+		if (P->SpeechAudio) P->SpeechAudio->SetVolumeMultiplier(FMath::Clamp(SoundVolume, 0.f, 2.f));
+		V.bStarted = true;
+	}
+	// Characters that stopped (or went away) fall silent.
+	for (auto It = CharacterVoices.CreateIterator(); It; ++It)
+		if (!Playing.Contains(It.Key()))
+		{
+			if (It.Value().bStarted && It.Value().Speaker.IsValid()) It.Value().Speaker->StopSpeech();
+			It.RemoveCurrent();
+		}
 }
 
 void UOKStudioGame::StopSceneAudio()
@@ -1471,6 +1554,7 @@ void UOKStudioGame::Tick(float DeltaTime)
 	{
 		UpdateStudioSound(StudioBgm, BgmFile(), Document->Sound.bBgmPlay, Document->Sound.bBgmRepeat);
 		UpdateStudioSound(StudioOutside, OutsideSoundFile(), Document->Sound.bOutsidePlay, Document->Sound.bOutsideRepeat);
+		UpdateCharacterVoices();
 	}
 	// Auto backup every few minutes, not while something is moving or loading.
 	const int32 Minutes = FOKStudioSettings::Get().BackupMinutes;

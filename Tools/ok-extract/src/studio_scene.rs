@@ -99,6 +99,9 @@ pub enum Object {
         anime_pattern: f32, anime_options: [f32; 2], anime_force_loop: bool,
         /// OICharInfo nipple (0..1) and siru levels (face, chest front, chest back, lower front, lower back).
         nipple: f32, siru: [u8; 5],
+        /// VoiceCtrl: the voice list (group, category, no of the Studio voice sheets) and its repeat (0 none, 1 all, 2 the
+        /// selected one).
+        voices: Vec<[i32; 3]>, voice_repeat: i32,
         /// Children attached to accessory slots (slot, objects).
         children: Vec<(i32, Vec<Object>)>,
     },
@@ -588,9 +591,10 @@ fn object(r: &mut Reader, v: &Version, kind: i32, depth: usize) -> Result<Object
             let anime_pattern = r.f32()?;
             r.bool()?; // option visible
             let anime_force_loop = r.bool()?;
-            let voices = r.count("voice")?;
-            r.take(voices * 12)?;
-            r.i32()?; // voice repeat
+            let n = r.count("voice")?;
+            let mut voices = Vec::with_capacity(n);
+            for _ in 0..n { voices.push([r.i32()?, r.i32()?, r.i32()?]); }
+            let voice_repeat = r.i32()?;
             r.bool()?; r.f32()?; r.bool()?; // son visible / length, simple
             r.json_color()?;
             let anime_options = [r.f32()?, r.f32()?];
@@ -600,7 +604,7 @@ fn object(r: &mut Reader, v: &Version, kind: i32, depth: usize) -> Result<Object
             let eyes = read_eyes(r.take(eyes_len)?, v)?;
             let anime_time = r.f32()?;
             for _ in 0..2 { let n = r.count("access")?; r.take(n * 8)?; }
-            Ok(Object::Character { key, change, visible, sex, card_offset, card_len, face_png_offset, face_png_len, ext_offset, ext_len, fk, ik, enable_fk, active_fk, enable_ik, active_ik, neck, eyes, anime, anime_speed, anime_time, hand, mouth_open, anime_pattern, anime_options, anime_force_loop, nipple, siru, children: kids })
+            Ok(Object::Character { key, change, visible, sex, card_offset, card_len, face_png_offset, face_png_len, ext_offset, ext_len, fk, ik, enable_fk, active_fk, enable_ik, active_ik, neck, eyes, anime, anime_speed, anime_time, hand, mouth_open, anime_pattern, anime_options, anime_force_loop, nipple, siru, voices, voice_repeat, children: kids })
         }
         1 => {
             let (key, change, visible) = base(r, true)?;
@@ -935,6 +939,27 @@ mod tests {
                 let e = used.entry(format!("(Studio sky pattern {})", fx.sky_pattern)).or_default();
                 e.0 += 1;
                 if e.1.is_empty() { e.1 = f.display().to_string(); }
+            }
+            fn voiced(objects: &[super::Object], out: &mut Vec<(usize, i32)>) {
+                for o in objects {
+                    match o {
+                        super::Object::Character { voices, voice_repeat, children, .. } => {
+                            if !voices.is_empty() { out.push((voices.len(), *voice_repeat)); }
+                            for (_, c) in children { voiced(c, out); }
+                        }
+                        super::Object::Item { children, .. } | super::Object::Folder { children, .. } | super::Object::Route { children, .. } => voiced(children, out),
+                        _ => {}
+                    }
+                }
+            }
+            if let Ok(s) = super::read(&bytes) {
+                let mut v = Vec::new();
+                voiced(&s.objects, &mut v);
+                for (n, repeat) in v {
+                    let e = used.entry(format!("(character voices: repeat {repeat}, {} voices)", if n == 1 { "1" } else if n <= 5 { "2-5" } else { ">5" })).or_default();
+                    e.0 += 1;
+                    if e.1.is_empty() { e.1 = f.display().to_string(); }
+                }
             }
             if let Some(fx) = super::read_nested(&bytes).ok().and_then(|s| s.effects) {
                 let e = used.entry(format!("(BGM {} repeat {} play {}; outside play {})", fx.bgm_no, fx.bgm_repeat, fx.bgm_play, fx.outside_play)).or_default();

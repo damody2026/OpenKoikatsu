@@ -118,6 +118,25 @@ struct OKSTUDIO_API FOKSceneAnimFloat
 	bool operator==(const FOKSceneAnimFloat& O) const = default;
 };
 
+/** One entry of a character's voice list (Studio VoiceCtrl): a voice of studio_voices.json by group (personality),
+ *  category and no. */
+USTRUCT(BlueprintType)
+struct OKSTUDIO_API FOKSceneVoice
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Voice")
+	int32 Group = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Voice")
+	int32 Category = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Voice")
+	int32 No = 0;
+
+	bool operator==(const FOKSceneVoice& O) const = default;
+};
+
 USTRUCT(BlueprintType)
 struct OKSTUDIO_API FOKSceneCharacter
 {
@@ -245,6 +264,22 @@ struct OKSTUDIO_API FOKSceneCharacter
 	/** Parts whose IK is switched off (bit per IkPartOf part: body, left arm, right arm, left leg, right leg). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pose")
 	int32 IkPartsOff = 0;
+
+	/** Studio voice list (VoiceCtrl): played in order on the character, the mouth following the sound. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Voice")
+	TArray<FOKSceneVoice> Voices;
+
+	/** 0 plays the list once, 1 repeats the whole list, 2 repeats the voice it starts from (Studio's None / All / Select). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Voice", meta = (ClampMin = "0", ClampMax = "2"))
+	int32 VoiceRepeat = 1;
+
+	/** Plays the list, from VoiceStart. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Voice")
+	bool bVoicePlay = false;
+
+	/** The list entry playing starts from (Studio's selected voice). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Voice")
+	int32 VoiceStart = 0;
 
 	/** The FK part of a bone (0 body, 1 chest, 2 hair, 3 neck, 4 left hand, 5 right hand, 6 skirt) and the IK part of an effector. */
 	static int32 FkPartOf(const FString& Bone);

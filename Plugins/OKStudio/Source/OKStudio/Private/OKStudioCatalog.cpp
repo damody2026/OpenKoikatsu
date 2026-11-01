@@ -46,6 +46,7 @@ const FOKStudioCatalog& FOKStudioCatalog::Get()
 		GCatalog->LoadAnims(AOKSceneActor::LibraryDirectory() / TEXT("studio_anims.json"));
 		GCatalog->LoadEffects(EffectsFile());
         GCatalog->LoadChildAnimations(AOKSceneActor::LibraryDirectory() / TEXT("studio_child_animations.json"));
+		GCatalog->LoadVoices(AOKSceneActor::LibraryDirectory() / TEXT("studio_voices.json"));
 	}
 	return *GCatalog;
 }
@@ -336,6 +337,33 @@ FString FOKStudioCatalog::BgmSound(int32 No) const
 {
 	const FOKStudioBgm* B = FindBgm(No);
 	const FString File = B ? AOKSceneActor::LibraryDirectory() / TEXT("studio/bgm") / B->File + TEXT(".ogg") : FString();
+	return !File.IsEmpty() && FPaths::FileExists(File) ? File : FString();
+}
+
+void FOKStudioCatalog::LoadVoices(const FString& File)
+{
+	// Studio character voices (ok-extract --oklib studio-voices); a library without them just lists none.
+	FString Text;
+	TSharedPtr<FJsonObject> Root;
+	if (!FFileHelper::LoadFileToString(Text, *File) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root) return;
+	for (const TSharedPtr<FJsonValue>& V : Array(Root, TEXT("groups"))) { const auto O = V->AsObject(); VoiceGroups.Add({ -1, Int(O, TEXT("id")), Str(O, TEXT("name")) }); }
+	for (const TSharedPtr<FJsonValue>& V : Array(Root, TEXT("categories"))) { const auto O = V->AsObject(); VoiceCategories.Add({ Int(O, TEXT("group")), Int(O, TEXT("id")), Str(O, TEXT("name")) }); }
+	for (const TSharedPtr<FJsonValue>& V : Array(Root, TEXT("voices")))
+	{
+		const auto O = V->AsObject();
+		Voices.Add({ Int(O, TEXT("group")), Int(O, TEXT("category")), Int(O, TEXT("no")), Str(O, TEXT("name")), Str(O, TEXT("file")) });
+	}
+}
+
+const FOKStudioVoice* FOKStudioCatalog::FindVoice(int32 Group, int32 Category, int32 No) const
+{
+	return Voices.FindByPredicate([&](const FOKStudioVoice& V) { return V.Group == Group && V.Category == Category && V.No == No; });
+}
+
+FString FOKStudioCatalog::VoiceSound(int32 Group, int32 Category, int32 No) const
+{
+	const FOKStudioVoice* V = FindVoice(Group, Category, No);
+	const FString File = V ? AOKSceneActor::LibraryDirectory() / TEXT("studio/voice") / V->File + TEXT(".ogg") : FString();
 	return !File.IsEmpty() && FPaths::FileExists(File) ? File : FString();
 }
 

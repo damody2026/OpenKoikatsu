@@ -138,6 +138,11 @@ namespace
 				TSharedRef<FJsonObject> F = MakeShared<FJsonObject>();
 				for (const TPair<FString, float>& P : G.SceneActor->BlendControlsOf(X.Id)) F->SetNumberField(P.Key, P.Value);
 				J->SetObjectField(TEXT("anim_controls"), F);
+				// The voice list: its length, settings and the entry being said now (-1: silent).
+				J->SetNumberField(TEXT("voices"), X.Character.Voices.Num());
+				J->SetBoolField(TEXT("voice_play"), X.Character.bVoicePlay);
+				J->SetNumberField(TEXT("voice_repeat"), X.Character.VoiceRepeat);
+				J->SetNumberField(TEXT("voice_playing"), G.VoicePlayingIndex(X.Id));
 			}
 			if (X.Kind == EOKSceneObjectKind::Light)
 			{
