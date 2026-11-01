@@ -1340,6 +1340,8 @@ public:
 	bool LookPointScreen(FVector2D& Out) const;
 	void DragLookPoint(const FVector2D& Delta);
 	bool MirrorPose(FOKSceneObject& X, int32 Mode);
+	/** The FK / IK pages' handle and point size sliders (HS2Studio6 操作轴／控制点; the settings' values). */
+	void HandleSizes();
 	/** IK targets onto where the limbs are under FK; Part >= 0: only that IK part's targets (HS2Studio6 IK 复位). */
 	void IkFromFk(FOKSceneObject& X, int32 Part = -1);
 	/** FK values from the current pose; Part >= 0: only that FK part (HS2Studio6 FK 初始化). */

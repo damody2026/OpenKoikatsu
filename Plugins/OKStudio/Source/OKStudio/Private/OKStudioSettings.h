@@ -18,6 +18,8 @@ struct FOKStudioSettings
 	bool bFlyMode = false;
 	/** Guide handle size (times the default) and snapping steps: move (cm), rotate (degrees), scale. */
 	float GizmoScale = 1.f;
+	/** FK bone and IK target points on the screen (times the default; HS2Studio6 控制点大小). */
+	float PointScale = 1.f;
 	float SnapMove = 10.f;
 	float SnapRotate = 15.f;
 	float SnapScale = 0.1f;

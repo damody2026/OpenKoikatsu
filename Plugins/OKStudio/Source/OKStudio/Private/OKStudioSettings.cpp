@@ -142,7 +142,7 @@ void FOKStudioSettings::Load()
 	{
 		auto Num = [&J](const TCHAR* Name, float& V) { double D; if (J->TryGetNumberField(Name, D)) V = float(D); };
 		Num(TEXT("orbit_speed"), OrbitSpeed); Num(TEXT("pan_speed"), PanSpeed); Num(TEXT("zoom_speed"), ZoomSpeed); Num(TEXT("fly_speed"), FlySpeed);
-		Num(TEXT("gizmo_scale"), GizmoScale); Num(TEXT("snap_move"), SnapMove); Num(TEXT("snap_rotate"), SnapRotate); Num(TEXT("snap_scale"), SnapScale);
+		Num(TEXT("gizmo_scale"), GizmoScale); Num(TEXT("point_scale"), PointScale); Num(TEXT("snap_move"), SnapMove); Num(TEXT("snap_rotate"), SnapRotate); Num(TEXT("snap_scale"), SnapScale);
 		Num(TEXT("ui_scale"), UiScale);
 		J->TryGetBoolField(TEXT("fly_mode"), bFlyMode);
 		double D;
@@ -170,7 +170,7 @@ void FOKStudioSettings::Save() const
 	TSharedRef<FJsonObject> J = MakeShared<FJsonObject>();
 	J->SetNumberField(TEXT("orbit_speed"), OrbitSpeed); J->SetNumberField(TEXT("pan_speed"), PanSpeed); J->SetNumberField(TEXT("zoom_speed"), ZoomSpeed);
 	J->SetNumberField(TEXT("fly_speed"), FlySpeed); J->SetBoolField(TEXT("fly_mode"), bFlyMode);
-	J->SetNumberField(TEXT("gizmo_scale"), GizmoScale); J->SetNumberField(TEXT("snap_move"), SnapMove); J->SetNumberField(TEXT("snap_rotate"), SnapRotate); J->SetNumberField(TEXT("snap_scale"), SnapScale);
+	J->SetNumberField(TEXT("gizmo_scale"), GizmoScale); J->SetNumberField(TEXT("point_scale"), PointScale); J->SetNumberField(TEXT("snap_move"), SnapMove); J->SetNumberField(TEXT("snap_rotate"), SnapRotate); J->SetNumberField(TEXT("snap_scale"), SnapScale);
 	J->SetNumberField(TEXT("backup_minutes"), BackupMinutes); J->SetNumberField(TEXT("backup_keep"), BackupKeep);
 	J->SetNumberField(TEXT("ui_scale"), UiScale);
 	TArray<TSharedPtr<FJsonValue>> Roots;

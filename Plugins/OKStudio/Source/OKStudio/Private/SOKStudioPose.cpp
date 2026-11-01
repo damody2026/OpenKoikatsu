@@ -211,7 +211,7 @@ int32 SOKStudioView::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, 
 		{
 			const bool bActive = (P.Ik >= 0 && Game->GuideIk == P.Ik) || (!P.Bone.IsEmpty() && Game->GuideBone == P.Bone);
 			const FLinearColor C = bActive ? FLinearColor::Yellow : P.Ik >= 9 ? FLinearColor(.3f, .5f, 1.f) : P.Ik >= 0 ? FLinearColor(1.f, .25f, .2f) : (P.bOn ? FLinearColor(.4f, 1.f, .4f) : FLinearColor(.75f, .95f, .75f));
-			const float R = bActive ? 6.f : 4.f;
+			const float R = (bActive ? 6.f : 4.f) * FMath::Clamp(FOKStudioSettings::Get().PointScale, 0.3f, 4.f);
 			FSlateDrawElement::MakeBox(Out, Layer + 4, Geometry.ToPaintGeometry(FVector2f(2.f * R, 2.f * R), FSlateLayoutTransform(FVector2f(P.At - FVector2D(R, R)))), Brush(C), ESlateDrawEffect::None, C);
 		}
 	}
@@ -320,7 +320,7 @@ bool SOKStudioPanel::PickPosePoint(const FVector2D& At)
 	TArray<FPosePoint> Points;
 	if (!PosePoints(Points)) return false;
 	const FPosePoint* Best = nullptr;
-	double BestDistance = 7.;
+	double BestDistance = 7. * FMath::Clamp(FOKStudioSettings::Get().PointScale, 0.3f, 4.f);
 	for (const FPosePoint& P : Points) { const double D = FVector2D::Distance(P.At, At); if (D < BestDistance) { BestDistance = D; Best = &P; } }
 	if (!Best) return false;
 	FOKSceneObject* X = Obj();
@@ -521,6 +521,13 @@ void SOKStudioPanel::BoneTree(const TArray<FString>& Bones, TFunction<FString(co
 	}
 }
 
+void SOKStudioPanel::HandleSizes()
+{
+	FOKStudioSettings& S = FOKStudioSettings::Get();
+	Row(TEXT("操作軸大小"), Spin([&S] { return S.GizmoScale; }, [&S](float V) { S.GizmoScale = FMath::Clamp(V, 0.3f, 4.f); S.Save(); }, 0.3f, 4.f, 0.05f));
+	Row(TEXT("控制點大小"), Spin([&S] { return S.PointScale; }, [&S](float V) { S.PointScale = FMath::Clamp(V, 0.3f, 4.f); S.Save(); }, 0.3f, 4.f, 0.05f));
+}
+
 void SOKStudioPanel::FkPage(FOKSceneObject& O)
 {
 	const FOKStudioCatalog& C = FOKStudioCatalog::Get();
@@ -572,6 +579,7 @@ void SOKStudioPanel::FkPage(FOKSceneObject& O)
 	Buttons({ { TEXT("複製姿勢"), Cmd(TEXT("pose.copy")) }, { TEXT("貼上姿勢"), Cmd(TEXT("pose.paste")) }, { TEXT("姿勢庫…"), Cmd(TEXT("app.poselibrary")) } });
 	// The chosen bone on the timeline (its own track: it moves between the keys that hold it).
 	Buttons({ { TEXT("骨骼打 key"), Cmd(TEXT("timeline.bonekey")) }, { TEXT("骨骼刪 key"), Cmd(TEXT("timeline.boneunkey")) } });
+	HandleSizes();
 	if (Game.IsValid() && !Game->GuideBone.IsEmpty()) Game->GuideBone = FkBone.IsEmpty() ? Game->GuideBone : FkBone;
 	TArray<FString> Bones;
 	for (int32 Op = 0; Op < 2; ++Op)
@@ -694,6 +702,7 @@ void SOKStudioPanel::IkPage(FOKSceneObject& O)
 		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("鏡像")), Cmd(TEXT("pose.mirror"), TEXT("all")), 0.f, 18.f, false, 10.f)]
 		+ SHorizontalBox::Slot().FillWidth(1.f)[Button(FText::FromString(TEXT("清除 IK")), [this] { if (FOKSceneObject* X = Obj()) { X->Character.Ik.Reset(); if (Game.IsValid()) Game->GuideIk = -1; Changed(); DeferRebuild(); } }, 0.f, 18.f, false, 10.f)];
 	Props->AddSlot().AutoHeight().Padding(0.f, 3.f)[Row1];
+	HandleSizes();
 }
 
 void SOKStudioPanel::LookPage(FOKSceneObject& O, bool bNeck)

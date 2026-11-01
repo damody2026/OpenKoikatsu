@@ -1570,6 +1570,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildSettings()
 		Setting(TEXT("飛行速度 cm/秒"), TEXT("自由飛行時 W A S D Q E 的速度"), Number(&S.FlySpeed, 10.f, 3000.f, 10.f), [] { FOKStudioSettings::Get().FlySpeed = 300.f; });
 		Setting(TEXT("自由飛行"), TEXT("開啟後按住右鍵是轉鏡頭，W A S D Q E 移動"), CheckBox(TEXT("開"), [] { return FOKStudioSettings::Get().bFlyMode; }, [](bool B) { FOKStudioSettings::Get().bFlyMode = B; FOKStudioSettings::Get().Save(); }), [] { FOKStudioSettings::Get().bFlyMode = false; });
 		Setting(TEXT("Gizmo 大小"), TEXT("移動、旋轉、縮放把手的螢幕大小倍率"), Number(&S.GizmoScale, 0.3f, 4.f, 0.05f), [] { FOKStudioSettings::Get().GizmoScale = 1.f; });
+		Setting(TEXT("控制點大小"), TEXT("畫面上 FK 骨點、IK 點的大小倍率（也是點選範圍）"), Number(&S.PointScale, 0.3f, 4.f, 0.05f), [] { FOKStudioSettings::Get().PointScale = 1.f; });
 		Setting(TEXT("吸附：移動 cm"), TEXT("吸附開啟或按住 Ctrl 時，移動的步進"), Number(&S.SnapMove, 0.1f, 1000.f, 0.5f), [] { FOKStudioSettings::Get().SnapMove = 10.f; });
 		Setting(TEXT("吸附：旋轉 度"), TEXT("吸附時旋轉的步進"), Number(&S.SnapRotate, 0.5f, 90.f, 0.5f), [] { FOKStudioSettings::Get().SnapRotate = 15.f; });
 		Setting(TEXT("吸附：縮放"), TEXT("吸附時縮放的步進"), Number(&S.SnapScale, 0.01f, 1.f, 0.01f), [] { FOKStudioSettings::Get().SnapScale = 0.1f; });
