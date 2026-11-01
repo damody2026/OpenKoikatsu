@@ -60,6 +60,74 @@ pub unsafe extern "C" fn ok_okanim_from_clip(s: *mut OkSession, key: *const c_ch
     })
 }
 
+/// Solves a VMD file into OK animation bytes on `s`'s shaped character skeleton (`s` may be null for standard KK rest).
+/// `params_json` is optional JSON (`char_scale`, `obj_scale_y`, `playback_speed`, `delay`, `looping`, `high_heels_rot`, etc.).
+#[no_mangle]
+pub unsafe extern "C" fn ok_okanim_from_vmd(
+    s: *const OkSession,
+    vmd_path: *const c_char,
+    params_json: *const c_char,
+    out: *mut u8,
+    cap: i32,
+) -> i32 {
+    let Some(path) = str_arg(vmd_path).filter(|p| !p.trim().is_empty()) else {
+        set_error("invalid vmd_path");
+        return -1;
+    };
+    let pj = str_arg(params_json).unwrap_or_default();
+    let sess_opt = s.as_ref();
+    let mut shape_sig = Vec::new();
+    if let Some(sess) = sess_opt {
+        for &v in &sess.shape_body {
+            shape_sig.extend_from_slice(&v.to_le_bytes());
+        }
+        shape_sig.extend_from_slice(&sess.nip_stand_rate.to_le_bytes());
+        let shoes_vis = sess
+            .parts
+            .iter()
+            .any(|p| p.role == "clothes_shoes" && p.render_visible);
+        shape_sig.push(u8::from(shoes_vis));
+        if let Some((name, main, guid)) = sess.active_shoe_meta.as_ref() {
+            shape_sig.push(1);
+            shape_sig.extend_from_slice(name.as_bytes());
+            shape_sig.push(0);
+            shape_sig.extend_from_slice(main.as_bytes());
+            shape_sig.push(0);
+            shape_sig.extend_from_slice(guid.as_bytes());
+            shape_sig.push(0);
+        } else if let Some(p) = sess.parts.iter().find(|p| p.role == "clothes_shoes") {
+            shape_sig.push(2);
+            shape_sig.extend_from_slice(p.name.as_bytes());
+            shape_sig.push(0);
+        } else {
+            shape_sig.push(0);
+        }
+    }
+    let k = hash_args(&[
+        b"vmd",
+        path.as_bytes(),
+        pj.as_bytes(),
+        &(s as usize).to_le_bytes(),
+        &shape_sig,
+    ]);
+    cached(k, out, cap, || {
+        let vmd_bytes = std::fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
+        let vmd = crate::vmd::VmdFile::parse(&vmd_bytes)?;
+        let ini = crate::mmdd::CharaIniConfig::parse(crate::mmdd::DEFAULT_CHARA_INI)?;
+        let (params, obj_scale_y) = crate::mmdd::MotionSolveParams::from_json_with_obj_scale(&pj)?;
+        let stem = std::path::Path::new(&path)
+            .file_stem()
+            .and_then(|st| st.to_str())
+            .unwrap_or("vmd");
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let rig = sess_opt.and_then(|sess| crate::mmdd::MmddCharacterRig::from_session(sess, obj_scale_y));
+            crate::mmdd::solve_vmd_to_okanim_for_rig(&vmd, &ini, &params, stem, rig.as_ref())
+        }))
+        .unwrap_or_else(|_| Err("VMD conversion panicked".into()))?;
+        r.to_bytes()
+    })
+}
+
 /// Rest skeleton of a character's Animator layer as a target/source header JSON (UTF-8, not terminated).
 #[no_mangle]
 pub unsafe extern "C" fn ok_okanim_session_rest(s: *mut OkSession, out: *mut u8, cap: i32) -> i32 {

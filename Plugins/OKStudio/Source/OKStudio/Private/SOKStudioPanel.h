@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // OK Studio in-game Slate UI: the scene view and the studio panel. Shared by OKStudioGame.cpp and its self tests.
 #include "OKStudioGame.h"
@@ -560,6 +560,21 @@ public:
 		// Animation files and video motion pairs.
 		AddCommand(TEXT("anim.file"), TEXT("播放 OK 動畫檔"), [this](const FString& Arg) { FOKSceneObject* X = Obj(); return X && !Arg.IsEmpty() && PickAnimFile(*X, Arg); });
 		AddCommand(TEXT("anim.pair"), TEXT("雙人影片動作"), [this](const FString& Arg) { return PickVideoPair(Arg); });
+		AddCommand(TEXT("mmd.vmd"), TEXT("載入 VMD 動作"), [this](const FString& Arg)
+		{
+			int32 TargetId = Game.IsValid() ? Game->SelectedId : -1;
+			FString Path = Arg.IsEmpty() ? MmdVmdPath : Arg;
+			int32 Sep = INDEX_NONE;
+			if (Path.FindChar(TEXT('|'), Sep) && Sep > 0)
+			{
+				TargetId = FCString::Atoi(*Path.Left(Sep));
+				Path = Path.Mid(Sep + 1);
+			}
+			if (TargetId < 0 && Game.IsValid() && Game->Document)
+				for (const FOKSceneObject& O : Game->Document->Objects)
+					if (O.Kind == EOKSceneObjectKind::Character) { TargetId = O.Id; break; }
+			return LoadVmdForCharacter(TargetId, Path);
+		});
 		// Pose.
 		AddCommand(TEXT("pose.mirror"), TEXT("鏡像姿勢"), [this](const FString& Arg) { FOKSceneObject* X = Obj(); return X && MirrorPose(*X, Arg == TEXT("l2r") ? 1 : Arg == TEXT("r2l") ? 2 : 0); });
 		Simple(TEXT("pose.ikfromfk"), TEXT("IK←FK"), [this] { if (FOKSceneObject* X = Obj()) IkFromFk(*X); });
@@ -618,9 +633,11 @@ public:
 	}
 
 	/** Moves the play head and samples the scene there. */
+	bool bMmdScrubWasPlaying = false;
 	void ScrubTo(float Time)
 	{
 		Game->bTimelinePlaying = false;
+		Game->StopSceneAudio();
 		const float T = FMath::Clamp(FMath::RoundToFloat(Time * 30.f) / 30.f, 0.f, Game->Document->Duration);
 		if (TimelineView) TimelineView->Scrub(T);
 		else Game->SetTimelineTime(T);
@@ -1370,6 +1387,7 @@ public:
 	float ExportFromT = 0.f, ExportToT = -1.f, ExportFpsV = 30.f;
 	int32 ExportW = 1920, ExportH = 1080, ExportKind = 0;
 	FString ExportFolderText;
+	FString MmdVmdPath;
 	TSharedRef<SWidget> BuildExport();
 	TSharedRef<SWidget> BuildMmdDirector();
 
@@ -2161,6 +2179,45 @@ public:
 		X.Character.Time = 0.f;
 		Changed();
 		DeferRebuild();
+		return true;
+	}
+	/** Solves a .vmd file on the character's live shaped skeleton (`FOkAnimBridge::FromVmd`) and plays it. */
+	bool LoadVmdForCharacter(int32 CharId, const FString& VmdFile)
+	{
+		if (!Game.IsValid() || !Game->Document) return false;
+		FOKSceneObject* X = Game->Document->Find(CharId);
+		if (!X || X->Kind != EOKSceneObjectKind::Character) { SetStatus(TEXT("請先選取一個角色")); return false; }
+		FString FullPath = VmdFile.TrimStartAndEnd().TrimQuotes();
+		if (FullPath.IsEmpty()) { SetStatus(TEXT("請輸入 .vmd 檔案路徑")); return false; }
+		if (FPaths::IsRelative(FullPath)) FullPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / FullPath);
+		if (!FPaths::FileExists(FullPath)) { SetStatus(TEXT("找不到 VMD 檔：") + FullPath); return false; }
+		AKKPreviewActor* Preview = Game->SceneActor ? Game->SceneActor->PreviewOf(CharId) : nullptr;
+		const FOkSession* Sess = (Preview && Preview->Session.IsOpen()) ? &Preview->Session : nullptr;
+		const float ObjScaleY = FMath::Max(float(X->Transform.GetScale3D().Z), 0.001f);
+		const FString ParamsJson = FString::Printf(TEXT("{\"obj_scale_y\":%.6f}"), ObjScaleY);
+		TArray<uint8> AnimBytes;
+		if (!FOkAnimBridge::FromVmd(Sess, FullPath, ParamsJson, AnimBytes))
+		{
+			SetStatus(TEXT("VMD 轉換失敗：") + FOkAnimBridge::LastError());
+			return false;
+		}
+		FString Stem = FPaths::MakeValidFileName(FPaths::GetBaseFilename(FullPath));
+		if (Stem.IsEmpty()) Stem = TEXT("vmd");
+		const FString RelPath = FString::Printf(TEXT("UserData/Studio/anim/vmd_%d_%s.okanim"), CharId, *Stem);
+		const FString AbsOut = FPaths::ProjectDir() / RelPath;
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(AbsOut), true);
+		if (!FFileHelper::SaveArrayToFile(AnimBytes, *AbsOut))
+		{
+			SetStatus(TEXT("無法寫入動畫檔：") + AbsOut);
+			return false;
+		}
+		const bool bWasSameFile = (X->Character.AnimFile == RelPath);
+		if (Game->SceneActor) Game->SceneActor->SetActiveVmdSource(CharId, FullPath, RelPath);
+		PickAnimFile(*X, RelPath);
+		if (bWasSameFile && Game->SceneActor) Game->SceneActor->Rebuild(CharId);
+		DeferFloat(TEXT("mmd"));
+		SetStatus(FString::Printf(TEXT("已載入 VMD（%s骨架）：#%d %s ← %s"),
+			Sess ? TEXT("角色體型") : TEXT("標準"), CharId, *X->Name, *FPaths::GetCleanFilename(FullPath)));
 		return true;
 	}
 	/** A video motion pair: the woman's motion on the primary character, the man's on the other selected character (or

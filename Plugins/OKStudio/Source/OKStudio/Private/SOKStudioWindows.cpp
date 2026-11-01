@@ -1698,6 +1698,25 @@ TSharedRef<SWidget> SOKStudioPanel::BuildMmdDirector()
 				if (!Game.IsValid() || !Game->Document) return 0.f;
 				return FMath::Clamp(Game->TimelineTime / FMath::Max(Game->Document->Duration, 0.01f), 0.f, 1.f);
 			})
+			.OnMouseCaptureBegin_Lambda([this]
+			{
+				if (!Game.IsValid()) return;
+				bMmdScrubWasPlaying = Game->bTimelinePlaying;
+				Game->bUserDragging = true;
+				Game->bTimelinePlaying = false;
+				Game->StopSceneAudio();
+			})
+			.OnMouseCaptureEnd_Lambda([this]
+			{
+				if (!Game.IsValid()) { bMmdScrubWasPlaying = false; return; }
+				Game->bUserDragging = false;
+				if (bMmdScrubWasPlaying)
+				{
+					bMmdScrubWasPlaying = false;
+					Game->bTimelinePlaying = true;
+					Game->UpdateSceneAudio();
+				}
+			})
 			.OnValueChanged_Lambda([this](float V)
 			{
 				if (!Game.IsValid() || !Game->Document) return;
@@ -1732,7 +1751,7 @@ TSharedRef<SWidget> SOKStudioPanel::BuildMmdDirector()
 		]
 		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f).VAlign(VAlign_Center)[CheckBox(TEXT("靜音"), [this] { return Game.IsValid() && Game->bMuteSound; }, [this](bool B) { if (Game.IsValid()) { Game->bMuteSound = B; Game->UpdateSceneAudio(); } })]
 		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 2.f, 0.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("音量")), 9.5f)]
-		+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(44.f).HeightOverride(18.f)[Spin([this] { return Game.IsValid() ? Game->SoundVolume : 1.f; }, [this](float V) { if (Game.IsValid()) { Game->SoundVolume = FMath::Clamp(V, 0.f, 2.f); Game->StopSceneAudio(); Game->UpdateSceneAudio(); } }, 0.f, 2.f, 0.05f)]]
+		+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(44.f).HeightOverride(18.f)[Spin([this] { return Game.IsValid() ? Game->SoundVolume : 1.f; }, [this](float V) { if (Game.IsValid()) { Game->SoundVolume = FMath::Clamp(V, 0.f, 2.f); Game->UpdateSceneAudio(); } }, 0.f, 2.f, 0.05f)]]
 		+ SHorizontalBox::Slot().AutoWidth().Padding(4.f, 0.f, 2.f, 0.f).VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("延遲(s)")), 9.5f)]
 		+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(48.f).HeightOverride(18.f)[Spin([this] { return Game.IsValid() && Game->Document ? Game->Document->SoundDelay : 0.f; }, [this](float V) { if (Game.IsValid() && Game->Document) { Game->Document->SoundDelay = V; Game->StopSceneAudio(); Game->UpdateSceneAudio(); Changed(); } }, -60.f, 60.f, 0.05f)]]
 	];
@@ -1822,6 +1841,31 @@ TSharedRef<SWidget> SOKStudioPanel::BuildMmdDirector()
 
 	// 3. Characters & VMD Motions
 	Body->AddSlot().AutoHeight().Padding(0.f, 6.f, 0.f, 3.f)[SectionHeader(TEXT("三、角色 VMD 動作、視線與表情設定"))];
+	Body->AddSlot().AutoHeight().Padding(0.f, 2.f)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[OKStudioStyle::Label(FText::FromString(TEXT("VMD 檔")), 9.5f, TextSoft())]
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(4.f, 0.f)
+		[
+			SNew(SBox).HeightOverride(20.f)
+			[
+				SNew(SEditableTextBox)
+				.Font(Font(9.5f))
+				.HintText(FText::FromString(TEXT("輸入 .vmd 檔案路徑，依角色專屬體型骨架即時求解…")))
+				.Text_Lambda([this] { return FText::FromString(MmdVmdPath); })
+				.OnTextChanged_Lambda([this](const FText& T) { MmdVmdPath = T.ToString(); })
+				.OnTextCommitted_Lambda([this](const FText& T, ETextCommit::Type Commit)
+				{
+					MmdVmdPath = T.ToString();
+					if (Commit == ETextCommit::OnEnter) RunCommand(TEXT("mmd.vmd"));
+				})
+			]
+		]
+		+ SHorizontalBox::Slot().AutoWidth()
+		[
+			Button(FText::FromString(TEXT("套用至選取")), Cmd(TEXT("mmd.vmd")), 80.f, 20.f, false, 9.5f)
+		]
+	];
 	if (Game.IsValid() && Game->Document)
 	{
 		int32 CharCount = 0;
@@ -1843,10 +1887,10 @@ TSharedRef<SWidget> SOKStudioPanel::BuildMmdDirector()
 						SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
 						[
-							OKStudioStyle::Label(FText::FromString(FString::Printf(TEXT("#%d %s　[%s]"), Id, *O.Name, *AnimName)), 10.f,
-								Game->SelectedId == Id ? FLinearColor(1.f, 0.9f, 0.35f) : OKStudioStyle::Text())
+							SNew(STextBlock).Font(Font(10.f)).ColorAndOpacity(Game->SelectedId == Id ? FLinearColor(1.f, 0.9f, 0.35f) : OKStudioStyle::Text()).OverflowPolicy(ETextOverflowPolicy::Ellipsis).AddMetaData<FTagMetaData>(TEXT("Ellipsis")).Text(FText::FromString(FString::Printf(TEXT("#%d %s　[%s]"), Id, *O.Name, *AnimName)))
 						]
 						+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[Button(FText::FromString(TEXT("選取")), [this, Id] { if (Game.IsValid()) { Game->Select(Id); DeferFloat(TEXT("mmd")); } }, 36.f, 18.f, Game->SelectedId == Id, 9.f)]
+						+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[Button(FText::FromString(TEXT("套用VMD")), [this, Id] { LoadVmdForCharacter(Id, MmdVmdPath); }, 58.f, 18.f, false, 9.f)]
 						+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[Button(FText::FromString(TEXT("換動作")), [this, Id] { if (Game.IsValid()) { Game->Select(Id); SetPage(EPage::Anim); DeferFloat(TEXT("mmd")); } }, 44.f, 18.f, false, 9.f)]
 						+ SHorizontalBox::Slot().AutoWidth().Padding(2.f, 0.f)[Button(FText::FromString(TEXT("骨骼/表情")), [this, Id] { if (Game.IsValid()) { Game->Select(Id); SetPage(EPage::Bones); DeferFloat(TEXT("mmd")); } }, 54.f, 18.f, false, 9.f)]
 						+ SHorizontalBox::Slot().AutoWidth()[Button(FText::FromString(TEXT("服裝")), [this, Id] { if (Game.IsValid()) { Game->Select(Id); SetPage(EPage::State); DeferFloat(TEXT("mmd")); } }, 36.f, 18.f, false, 9.f)]

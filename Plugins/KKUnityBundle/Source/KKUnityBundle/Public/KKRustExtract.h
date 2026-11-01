@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Tasks/Task.h"
@@ -215,6 +215,8 @@ public:
 	float FaceRuntimeSetting(int32 Setting) const;
 	float EyeMaterialSetting(int32 PartIndex, int32 Setting) const;
 	bool SetEyeGaze(float LeftH, float RightH, float Vertical);
+	bool SetBlush(float Rate);
+	bool SetIrisSmall(float Rate);
 	int32 EyeLookPatternCount() const;
 	bool StepEyeLook(const FVector& UnityTarget, int32 Pattern, float DeltaSeconds, bool Enabled, float* Rates);
 	bool ApplyAnimTime(float Time);

@@ -1156,6 +1156,14 @@ static bool OKStudioLoadAudioFile(const FString& Path, TSharedPtr<const FKKSpeec
 			auto Pcm = MakeShared<FKKSpeechPcm, ESPMode::ThreadSafe>();
 			Pcm->Channels = Channels;
 			Pcm->SampleRate = Rate;
+			if (Format == 1 && Bits == 8)
+			{
+				Pcm->Samples.SetNumUninitialized(DataBytes);
+				for (int32 I = 0; I < DataBytes; ++I)
+					Pcm->Samples[I] = int16((int32(Bytes[Body + I]) - 128) << 8);
+				Out = Pcm;
+				return true;
+			}
 			if (Format == 1 && Bits == 16)
 			{
 				const int32 Count = DataBytes / 2;
@@ -1173,6 +1181,16 @@ static bool OKStudioLoadAudioFile(const FString& Path, TSharedPtr<const FKKSpeec
 					const int32 V = (int32(Bytes[Body + I * 3 + 1]) << 8) | (int32(int8(Bytes[Body + I * 3 + 2])) << 16);
 					Pcm->Samples[I] = int16(V >> 8);
 				}
+				Out = Pcm;
+				return true;
+			}
+			if (Format == 1 && Bits == 32)
+			{
+				const int32 Count = DataBytes / 4;
+				Pcm->Samples.SetNumUninitialized(Count);
+				const int32* Src = reinterpret_cast<const int32*>(Bytes.GetData() + Body);
+				for (int32 I = 0; I < Count; ++I)
+					Pcm->Samples[I] = int16(Src[I] >> 16);
 				Out = Pcm;
 				return true;
 			}
@@ -1195,6 +1213,11 @@ static bool OKStudioLoadAudioFile(const FString& Path, TSharedPtr<const FKKSpeec
 	return false;
 }
 
+bool OKStudioGameInternal::LoadAudioFile(const FString& Path, TSharedPtr<const FKKSpeechPcm, ESPMode::ThreadSafe>& Out, FString& Error)
+{
+	return OKStudioLoadAudioFile(Path, Out, Error);
+}
+
 /** A sound menu file decoding on a worker thread. */
 struct FOKStudioSoundLoad
 {
@@ -1205,6 +1228,22 @@ struct FOKStudioSoundLoad
 FString UOKStudioGame::BgmFile() const
 {
 	return Document ? FOKStudioCatalog::Get().BgmSound(Document->Sound.Bgm) : FString();
+}
+
+FString UOKStudioGame::SceneSoundFile() const
+{
+	if (!Document || Document->SoundFile.IsEmpty()) return FString();
+	if (FPaths::IsRelative(Document->SoundFile))
+	{
+		if (!File.IsEmpty())
+		{
+			const FString BesideScene = FPaths::ConvertRelativePathToFull(FPaths::GetPath(File) / Document->SoundFile);
+			if (FPaths::FileExists(BesideScene)) return BesideScene;
+		}
+		const FString InProject = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / Document->SoundFile);
+		if (FPaths::FileExists(InProject)) return InProject;
+	}
+	return FPaths::FileExists(Document->SoundFile) ? FPaths::ConvertRelativePathToFull(Document->SoundFile) : FString();
 }
 
 FString UOKStudioGame::OutsideSoundFile() const
@@ -1366,33 +1405,72 @@ void UOKStudioGame::StopSceneAudio()
 		if (SceneAudio->IsPlaying()) SceneAudio->Stop();
 		SceneAudio.Reset();
 	}
-	AudioStartTimelineTime = -1000.f;
+	SceneAudioWave.Reset();
+	AudioMasterClock.StopPlayback();
+}
+
+bool UOKStudioGame::EnsureSceneAudioPcmLoaded()
+{
+	const FString SoundPath = SceneSoundFile();
+	if (SoundPath.IsEmpty())
+	{
+		if (!LoadedSoundFile.IsEmpty())
+		{
+			StopSceneAudio();
+			LoadedSoundFile.Reset();
+			SceneAudioPcm.Reset();
+		}
+		return false;
+	}
+	if (LoadedSoundFile != SoundPath)
+	{
+		StopSceneAudio();
+		LoadedSoundFile = SoundPath;
+		SceneAudioPcm.Reset();
+		FString Error;
+		if (OKStudioLoadAudioFile(SoundPath, SceneAudioPcm, Error))
+		{
+			const float Len = SceneAudioPcm && SceneAudioPcm->Channels > 0 && SceneAudioPcm->SampleRate > 0 ? float(SceneAudioPcm->Samples.Num() / SceneAudioPcm->Channels) / float(SceneAudioPcm->SampleRate) : 0.f;
+			UE_LOG(LogTemp, Display, TEXT("OK studio: loaded scene audio %s (%.2fs, %d Hz, %d ch)"), *SoundPath, Len, SceneAudioPcm ? SceneAudioPcm->SampleRate : 0, SceneAudioPcm ? SceneAudioPcm->Channels : 0);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("OK studio: scene audio %s failed to load: %s"), *SoundPath, *Error);
+		}
+	}
+	return SceneAudioPcm && SceneAudioPcm->Channels > 0 && SceneAudioPcm->SampleRate > 0;
+}
+
+void UOKStudioGame::PollSceneAudioHardwareClock()
+{
+	if (!AudioMasterClock.bAudioActive) return;
+	if (UKKSpeechWave* Wave = SceneAudioWave.Get(); Wave && Wave->Meter)
+	{
+		double HwAudioSeconds = 0.0;
+		double HwWallSeconds = 0.0;
+		bool bHwFinished = false;
+		if (Wave->Meter->ReadClockAnchor(AudioMasterClock.LastMeterSeq, HwAudioSeconds, HwWallSeconds, bHwFinished))
+		{
+			AudioMasterClock.OnHardwareAnchor(AudioMasterClock.SeekGeneration, HwAudioSeconds, HwWallSeconds, bHwFinished, true);
+		}
+		else if (Wave->Meter->bFinished.load(std::memory_order_acquire))
+		{
+			AudioMasterClock.bGeneratorFinished = true;
+		}
+	}
+	if (AudioMasterClock.bGeneratorFinished && (!SceneAudio.IsValid() || !SceneAudio->IsPlaying()))
+	{
+		AudioMasterClock.OnHardwareAnchor(AudioMasterClock.SeekGeneration, double(AudioMasterClock.AudioDuration), FPlatformTime::Seconds(), true, true);
+	}
 }
 
 void UOKStudioGame::UpdateSceneAudio()
 {
-	if (!Document || Document->SoundFile.IsEmpty() || bMuteSound || !bTimelinePlaying || IsExporting())
+	if (!Document || bMuteSound || !bTimelinePlaying || TimelineSpeed <= 0.f || IsExporting() || !EnsureSceneAudioPcmLoaded())
 	{
 		StopSceneAudio();
 		return;
 	}
-	if (LoadedSoundFile != Document->SoundFile)
-	{
-		StopSceneAudio();
-		LoadedSoundFile = Document->SoundFile;
-		SceneAudioPcm.Reset();
-		FString Error;
-		if (OKStudioLoadAudioFile(Document->SoundFile, SceneAudioPcm, Error))
-		{
-			const float Len = SceneAudioPcm && SceneAudioPcm->Channels > 0 && SceneAudioPcm->SampleRate > 0 ? float(SceneAudioPcm->Samples.Num() / SceneAudioPcm->Channels) / float(SceneAudioPcm->SampleRate) : 0.f;
-			UE_LOG(LogTemp, Display, TEXT("OK studio: loaded scene audio %s (%.2fs, %d Hz, %d ch)"), *Document->SoundFile, Len, SceneAudioPcm ? SceneAudioPcm->SampleRate : 0, SceneAudioPcm ? SceneAudioPcm->Channels : 0);
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("OK studio: scene audio %s failed to load: %s"), *Document->SoundFile, *Error);
-		}
-	}
-	if (!SceneAudioPcm || SceneAudioPcm->Channels <= 0 || SceneAudioPcm->SampleRate <= 0) return;
 	const float AudioTime = TimelineTime - Document->SoundDelay;
 	const float TotalDuration = float(SceneAudioPcm->Samples.Num() / SceneAudioPcm->Channels) / float(SceneAudioPcm->SampleRate);
 	if (AudioTime < 0.f || AudioTime >= TotalDuration)
@@ -1400,23 +1478,43 @@ void UOKStudioGame::UpdateSceneAudio()
 		StopSceneAudio();
 		return;
 	}
-	const float Speed = FMath::Clamp(TimelineSpeed, 0.1f, 4.f);
-	const double ElapsedWall = FPlatformTime::Seconds() - AudioStartWallSeconds;
-	const float ExpectedAudioTime = AudioStartTimelineTime + float(ElapsedWall) * AudioStartSpeed;
-	if (!SceneAudio.IsValid() || !SceneAudio->IsPlaying() || !FMath::IsNearlyEqual(Speed, AudioStartSpeed, 1e-3f) || FMath::Abs(AudioTime - ExpectedAudioTime) > 0.25f)
+	const float EffectiveSpeed = FOKAudioMasterClock::ClampAudioSpeed(TimelineSpeed);
+	const float ClampedVolume = FMath::Clamp(SoundVolume, 0.f, 2.f);
+	if (SceneAudio.IsValid() && SceneAudio->IsPlaying() && AudioMasterClock.bAudioActive)
 	{
-		StopSceneAudio();
-		UWorld* World = GetTickableGameObjectWorld();
-		if (!World) return;
-		UKKSpeechWave* Wave = NewObject<UKKSpeechWave>(this);
-		Wave->Init(SceneAudioPcm, World->GetAudioDevice().IsValid() ? World->GetAudioDevice()->GetSampleRate() : SceneAudioPcm->SampleRate);
-		if (UAudioComponent* Comp = UGameplayStatics::SpawnSound2D(World, Wave, FMath::Clamp(SoundVolume, 0.f, 2.f), Speed, AudioTime))
+		SceneAudio->SetVolumeMultiplier(ClampedVolume);
+		if (!FMath::IsNearlyEqual(EffectiveSpeed, AudioMasterClock.AudioSpeed, 1e-4f))
 		{
-			SceneAudio = Comp;
-			AudioStartTimelineTime = AudioTime;
-			AudioStartWallSeconds = FPlatformTime::Seconds();
-			AudioStartSpeed = Speed;
+			SceneAudio->SetPitchMultiplier(EffectiveSpeed);
+			AudioMasterClock.UpdateSpeed(FPlatformTime::Seconds(), EffectiveSpeed);
 		}
+		return;
+	}
+
+	StopSceneAudio();
+	UWorld* World = GetTickableGameObjectWorld();
+	if (!World) return;
+	UKKSpeechWave* Wave = NewObject<UKKSpeechWave>(this);
+	Wave->Init(SceneAudioPcm, World->GetAudioDevice().IsValid() ? World->GetAudioDevice()->GetSampleRate() : SceneAudioPcm->SampleRate);
+	Wave->VirtualizationMode = EVirtualizationMode::PlayWhenSilent;
+	if (UAudioComponent* Comp = UGameplayStatics::CreateSound2D(World, Wave, ClampedVolume, EffectiveSpeed, AudioTime, nullptr, false, true))
+	{
+		Comp->bAlwaysPlay = true;
+		Comp->bIsMusic = true;
+		Comp->bIsUISound = true;
+		Comp->bShouldRemainActiveIfDropped = true;
+		const uint64 Gen = AudioMasterClock.BeginPlayback(AudioTime, FPlatformTime::Seconds(), EffectiveSpeed, TotalDuration);
+		TWeakObjectPtr<UOKStudioGame> WeakThis(this);
+		Comp->OnAudioPlaybackPercentNative.AddLambda([WeakThis, Gen, TotalDuration](const UAudioComponent*, const USoundWave*, const float Percent)
+		{
+			if (UOKStudioGame* Self = WeakThis.Get())
+			{
+				Self->AudioMasterClock.OnHardwareAnchor(Gen, double(Percent) * double(TotalDuration), FPlatformTime::Seconds(), Percent >= 1.f, false);
+			}
+		});
+		Comp->Play(AudioTime);
+		SceneAudio = Comp;
+		SceneAudioWave = Wave;
 	}
 }
 
@@ -1425,14 +1523,20 @@ void UOKStudioGame::SetTimelineTime(float Time)
 	TimelineTime = FMath::Clamp(Time, 0.f, FMath::Max(Document->Duration, 0.01f));
 	Document->ItemAnimationSeconds = TimelineTime;
 	Document->Playhead = TimelineTime; // saved with the scene
+	if (SceneActor) SceneActor->bTimelineDriven = bTimelinePlaying || !Document->SoundFile.IsEmpty();
 	// Posing the scene for a time is not an edit (no undo step, no unsaved mark).
 	TGuardValue<bool> Evaluating(bEvaluatingTimeline, true);
 	Document->EvaluateTimeline(TimelineTime);
-	if (!bTimelinePlaying && SceneActor)
+	if ((!bTimelinePlaying || !bSteppingTimelineFromClock) && SceneActor)
 	{
 		for (const FOKSceneObject& O : Document->Objects)
 			if (O.Kind == EOKSceneObjectKind::Character)
 				SceneActor->SetAnimationTime(O.Id, TimelineTime);
+		SceneActor->PlaceAttached();
+	}
+	if (!bSteppingTimelineFromClock)
+	{
+		StopSceneAudio();
 	}
 }
 
@@ -1540,20 +1644,61 @@ void UOKStudioGame::Tick(float DeltaTime)
 		Document->ActiveCamera = -1;
 	}
 	TickExport();
-	if (bTimelinePlaying && Document)
+	if (SceneActor && Document) SceneActor->bTimelineDriven = bTimelinePlaying || !Document->SoundFile.IsEmpty();
+	if (bTimelinePlaying && Document && !IsExporting())
 	{
+		bool bJustStartedAudio = false;
+		if (!AudioMasterClock.bAudioActive && !bMuteSound && TimelineSpeed > 0.f && EnsureSceneAudioPcmLoaded())
+		{
+			const float AudioTime = TimelineTime - Document->SoundDelay;
+			const float TotalDuration = float(SceneAudioPcm->Samples.Num() / SceneAudioPcm->Channels) / float(SceneAudioPcm->SampleRate);
+			if (AudioTime >= 0.f && AudioTime < TotalDuration)
+			{
+				UpdateSceneAudio();
+				bJustStartedAudio = AudioMasterClock.bAudioActive;
+			}
+		}
+
+		PollSceneAudioHardwareClock();
+
 		const float Length = FMath::Max(Document->Duration, 0.01f);
-		float Next = TimelineTime + DeltaTime * TimelineSpeed;
-		// A loop range plays inside itself.
 		const float Begin = LoopEnd > LoopStart ? LoopStart : 0.f, End = LoopEnd > LoopStart ? FMath::Min(LoopEnd, Length) : Length;
-		if (Next > End) Next = Begin + FMath::Fmod(Next - Begin, FMath::Max(End - Begin, 0.01f));
-		SetTimelineTime(Next);
+		FOKAudioMasterClock::FStepInput StepIn;
+		StepIn.CurrentTimelineTime = TimelineTime;
+		StepIn.RenderDeltaSeconds = DeltaTime;
+		StepIn.NowWallSeconds = FPlatformTime::Seconds();
+		StepIn.TimelineSpeed = TimelineSpeed;
+		StepIn.SoundDelay = Document->SoundDelay;
+		StepIn.LoopBegin = Begin;
+		StepIn.LoopEnd = End;
+		StepIn.bJustStartedThisTick = bJustStartedAudio;
+		const FOKAudioMasterClock::FStepResult Step = AudioMasterClock.StepTimeline(StepIn);
+
+		{
+			TGuardValue<bool> ClockStepGuard(bSteppingTimelineFromClock, true);
+			SetTimelineTime(Step.NextTimelineTime);
+		}
+
+		if (Step.bLooped || Step.bAudioReachedEnd)
+		{
+			StopSceneAudio();
+		}
+		if ((Step.bHardSnapped || Step.bLooped) && SceneActor)
+		{
+			for (const FOKSceneObject& O : Document->Objects)
+				if (O.Kind == EOKSceneObjectKind::Character)
+					SceneActor->SetAnimationTime(O.Id, TimelineTime);
+			SceneActor->PlaceAttached();
+		}
 	}
 	UpdateSceneAudio();
 	if (Document)
 	{
+		const FString SceneSound = SceneSoundFile();
+		const FString OutsideSound = OutsideSoundFile();
+		const bool bDuplicateOutside = !SceneSound.IsEmpty() && !OutsideSound.IsEmpty() && FPaths::IsSamePath(SceneSound, OutsideSound);
 		UpdateStudioSound(StudioBgm, BgmFile(), Document->Sound.bBgmPlay, Document->Sound.bBgmRepeat);
-		UpdateStudioSound(StudioOutside, OutsideSoundFile(), Document->Sound.bOutsidePlay, Document->Sound.bOutsideRepeat);
+		UpdateStudioSound(StudioOutside, OutsideSound, Document->Sound.bOutsidePlay && !bDuplicateOutside, Document->Sound.bOutsideRepeat);
 		UpdateCharacterVoices();
 	}
 	// Auto backup every few minutes, not while something is moving or loading.

@@ -421,6 +421,9 @@ pub fn apply(player: &mut Player, sessions: &mut [&mut OkSession], t: f32, dt: f
     let mut heights = Vec::with_capacity(eval.roles.len());
     for (role, s) in eval.roles.iter().zip(sessions.iter_mut()) {
         s.ok_begin_frame(t);
+        let brow_off = role.pose.curves.iter().find(|(k, _)| k == "face.brow_offset_y").map_or(0.0, |(_, v)| *v);
+        let mouth_wider = role.pose.curves.iter().find(|(k, _)| k == "face.mouth_wider").map_or(0.0, |(_, v)| *v);
+        s.apply_mmdd_face_bone_curves(brow_off, mouth_wider);
         let (Some(body), Some(rest)) = (s.body_skel.as_mut(), s.body_shaped.as_ref()) else { return Err("character has no body skeleton".into()) };
         heights.push(write_pose(body, rest, role, &player.aliases));
     }
@@ -575,12 +578,14 @@ pub fn apply(player: &mut Player, sessions: &mut [&mut OkSession], t: f32, dt: f
         std::thread::scope(|scope| {
             for (role, s) in eval.roles.iter().zip(sessions.iter_mut()) {
                 let scene = role.anim.scene;
-                scope.spawn(move || s.ok_finish_frame(dt, scene));
+                let mmdd_lock = role.anim.meta.get("source").map(String::as_str) == Some("mmdd_vmd");
+                scope.spawn(move || s.ok_finish_frame_ex(dt, scene, mmdd_lock));
             }
         });
     } else {
         for (role, s) in eval.roles.iter().zip(sessions.iter_mut()) {
-            s.ok_finish_frame(dt, role.anim.scene);
+            let mmdd_lock = role.anim.meta.get("source").map(String::as_str) == Some("mmdd_vmd");
+            s.ok_finish_frame_ex(dt, role.anim.scene, mmdd_lock);
         }
     }
     prof::add(6, t_phase);

@@ -431,6 +431,7 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 		Actor->bUsePrivateGpuPlayback = bGpuPlayback;
 		if (Object.Character.StudioAnimeNo >= 0)
 		{
+			ActiveVmdSources.Remove(Object.Id);
 			// A Studio animation of the OK animation library (no Unity bundles).
 			const FOKSceneCharacter& C = Object.Character;
 			const FOKStudioAnim* Entry = FOKStudioCatalog::Get().FindAnim(C.StudioAnimeKind, C.StudioAnimeGroup, C.StudioAnimeCategory, C.StudioAnimeNo);
@@ -450,6 +451,25 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 		}
 		else if (!Object.Character.AnimFile.IsEmpty())
 		{
+			if (const FActiveVmdSource* VmdSrc = ActiveVmdSources.Find(Object.Id))
+			{
+				if (Object.Character.AnimFile == VmdSrc->OkAnimRelPath && FPaths::FileExists(VmdSrc->VmdFile))
+				{
+					const float ObjScaleY = FMath::Max(float(Object.Transform.GetScale3D().Z), 0.001f);
+					const FString ParamsJson = FString::Printf(TEXT("{\"obj_scale_y\":%.6f}"), ObjScaleY);
+					TArray<uint8> ReSolvedBytes;
+					if (FOkAnimBridge::FromVmd(&Actor->Session, VmdSrc->VmdFile, ParamsJson, ReSolvedBytes))
+					{
+						const FString AbsOut = FPaths::IsRelative(Object.Character.AnimFile) ? FPaths::ProjectDir() / Object.Character.AnimFile : Object.Character.AnimFile;
+						IFileManager::Get().MakeDirectory(*FPaths::GetPath(AbsOut), true);
+						FFileHelper::SaveArrayToFile(ReSolvedBytes, *AbsOut);
+					}
+				}
+				else
+				{
+					ActiveVmdSources.Remove(Object.Id);
+				}
+			}
 			// An .okanim file of its own (a video motion, an exported timeline).
 			const FString File = FPaths::IsRelative(Object.Character.AnimFile) ? FPaths::ProjectDir() / Object.Character.AnimFile : Object.Character.AnimFile;
 			FString AnimError;
@@ -474,6 +494,7 @@ bool AOKSceneActor::Build(const FOKSceneObject& Object, FShown& Out, FString& Ou
 		}
 		else if (Object.Character.Animation.IsValid())
 		{
+			ActiveVmdSources.Remove(Object.Id);
 			const UOKAnimationAsset* Anim = Cast<UOKAnimationAsset>(Object.Character.Animation.TryLoad());
 			FString AnimError;
 			const TSharedPtr<FOkAnimPlayer> Player = Anim ? Anim->CreatePlayer(AnimError) : nullptr;
@@ -766,7 +787,8 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 	if (!Actor) return;
 	const FOKSceneCharacter& C = Object.Character;
 	// The eyes pattern is a cha_eyeset row: its FaceBlendShape pattern is the row's EyesPtn (ChaControl.ChangeEyesPtn).
-	const bool bHasAnimFace = Actor->OkPlayer && Actor->OkPlayer->Curves(0, 0.f).Contains(TEXT("face.mouth_open"));
+	const TMap<FString, float> InitCurves = Actor->OkPlayer ? Actor->OkPlayer->Curves(0, 0.f) : TMap<FString, float>();
+	const bool bHasAnimFace = InitCurves.Contains(TEXT("face.mouth_open")) || InitCurves.Contains(TEXT("face.eye_open")) || InitCurves.Contains(TEXT("face.eye_open_l"));
 	if (!bHasAnimFace && C.EyesPattern >= 0)
 	{
 		const int32 Blend = FOKStudioCatalog::Get().EyeSet(C.EyesPattern).BlendPattern;
@@ -776,7 +798,7 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 	if (!bHasAnimFace && C.MouthPattern >= 0) Actor->SetMouthPattern(C.MouthPattern, false);
 	if (!bHasAnimFace && C.MouthOpen >= 0.f) Actor->SetMouthOpen(C.MouthOpen);
 	// Eye opening: the eye control's fixed open rate on its current pattern (ChaControl.ChangeEyesOpenMax).
-	if (C.EyesOpen >= 0.f)
+	if (!bHasAnimFace && C.EyesOpen >= 0.f)
 	{
 		if (Item.EyesOpenBefore < 0.f) { Item.EyesOpenBefore = Actor->FaceOpen01[0]; Item.bEyesManualBefore = Actor->bManualFaceControl[0]; }
 		Actor->SetFaceControl(1, Actor->FacePattern[0], C.EyesOpen, false);
@@ -787,6 +809,10 @@ void AOKSceneActor::ApplyCharacterState(const FOKSceneObject& Object, FShown& It
 		Actor->FaceOpen01[0] = Item.EyesOpenBefore;
 		Actor->bManualFaceControl[0] = Item.bEyesManualBefore;
 		Item.EyesOpenBefore = -1.f;
+	}
+	if (!InitCurves.Contains(TEXT("face.blush")) && C.Blush >= 0.f && !FMath::IsNearlyEqual(C.Blush, Actor->BlushRate, 1.e-3f))
+	{
+		Actor->SetBlush(C.Blush);
 	}
 	if (bHasAnimFace) { if (Actor->bAutomaticBlink) Actor->SetAutomaticBlink(false); } else if (C.Blink >= 0 && Actor->bAutomaticBlink != (C.Blink == 1)) Actor->SetAutomaticBlink(C.Blink == 1);
 	// Studio controls of a blended H motion (option 1 height, option 2 breast, pattern): the scene's value, else the
@@ -1214,8 +1240,8 @@ namespace
 void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhase)
 {
     if (!Document || !FMath::IsFinite(DeltaSeconds) || DeltaSeconds < 0.f) return;
-    const bool bHasTracks = Document->Tracks.Num() > 0;
-    if (bAdvancePhase && !bHasTracks) Document->ItemAnimationSeconds += DeltaSeconds;
+    const bool bUseTimelineClock = Document->Tracks.Num() > 0 || bTimelineDriven;
+    if (bAdvancePhase && !bUseTimelineClock) Document->ItemAnimationSeconds += DeltaSeconds;
     TArray<AKKPreviewActor*, TInlineAllocator<16>> Actors;
     const bool bSharePose = CVarSharePose.GetValueOnGameThread() != 0;
     for (auto& Pair : Shown)
@@ -1226,7 +1252,7 @@ void AOKSceneActor::AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhas
         // An anim player or a session clip (a video motion, PoseMode 2) runs on the scene's clock.
         if (Actor->OkPlayer || Actor->PoseMode == 2)
         {
-            if (bHasTracks)
+            if (bUseTimelineClock)
                 Pair.Value.Time = Object->Character.Time + Document->ItemAnimationSeconds * Object->Character.Speed;
             else if (bAdvancePhase)
                 Pair.Value.Time += DeltaSeconds * Object->Character.Speed;
@@ -1307,8 +1333,15 @@ void AOKSceneActor::Rebuild(int32 Id)
 	if (FShown* Item = Shown.Find(Id)) Item->Kind = EOKSceneObjectKind::Folder == Item->Kind ? EOKSceneObjectKind::Character : EOKSceneObjectKind::Folder;
 }
 
+void AOKSceneActor::SetActiveVmdSource(int32 Id, const FString& VmdFile, const FString& OkAnimRelPath)
+{
+	if (VmdFile.IsEmpty() || OkAnimRelPath.IsEmpty()) ActiveVmdSources.Remove(Id);
+	else ActiveVmdSources.Add(Id, FActiveVmdSource{ VmdFile, OkAnimRelPath });
+}
+
 bool AOKSceneActor::SetCharacterAnimation(int32 Id, int32 Kind, int32 Group, int32 Category, int32 No, FString& OutError)
 {
+	ActiveVmdSources.Remove(Id);
 	FShown* Item = Shown.Find(Id);
 	FOKSceneObject* Object = Document ? Document->Find(Id) : nullptr;
 	AKKPreviewActor* Actor = Item ? Item->Preview.Get() : nullptr;
@@ -1981,6 +2014,7 @@ void AOKSceneActor::ReleaseScene()
 	bSkyDomesDirty = true;
 	for (auto& Pair : Shown) Release(Pair.Value);
 	Shown.Reset();
+	ActiveVmdSources.Reset();
 	for (const TWeakObjectPtr<AKKPreviewActor>& P : ShownMapPreviews) if (P.IsValid()) P->Destroy();
 	ShownMapPreviews.Reset();
 	ShownMap = -1;

@@ -60,6 +60,7 @@ pub(crate) fn extract_session_from_info(
         }
     }
     let mut session_parts: Vec<crate::session::SessionPart> = Vec::new();
+    let mut active_shoe_meta: Option<(String, String, String)> = None;
     let mut manifest = Manifest::default();
     manifest.clothes_states = crate::unity::clothes_states();
     manifest.shoes_type = crate::unity::requested_shoes_type();
@@ -1751,6 +1752,14 @@ pub(crate) fn extract_session_from_info(
                 .and_then(|slot| slot.as_ref()).cloned() else {
                 continue;
             };
+            let active_shoe_kind = if manifest.shoes_type == 0 || card.clothes_ids.len() <= 8 { 7 } else { 8 };
+            if kind == active_shoe_kind && !is_dummy_part(&entry.main_data, Some(&entry.name)) {
+                active_shoe_meta = Some((
+                    entry.name.clone(),
+                    entry.main_data.clone(),
+                    guid.clone(),
+                ));
+            }
             if kind == 0 {
                 top_type = entry.info("Kind").parse().unwrap_or(0);
                 top_not_bra = entry.info("NotBra").trim() == "1";
@@ -2297,6 +2306,10 @@ pub(crate) fn extract_session_from_info(
         paired_ik_runtime: None,
         anim_clip: std::env::var("OK_POSE").unwrap_or_else(|_| "Stand_D_00".to_string()),
         anim_scene_mode: 0,
+        mmdd_world_lock: false,
+        mmdd_face_bone_dirty: false,
+        active_shoe_meta,
+        face_runtime: Default::default(),
         anim_parameters: std::collections::HashMap::new(),
         anim_clock:Default::default(),anim_crossfade:None,anim_layer_crossfades:Default::default(),
         body_shaped: None,

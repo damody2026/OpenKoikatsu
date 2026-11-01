@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "OKSceneDocument.h"
+#include "OKAudioMasterClock.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "InputCoreTypes.h"
@@ -212,8 +213,11 @@ public:
 	int32 FindMmdCameraId(bool bOnlyMmdScene = false) const;
 	bool bMuteSound = false;
 	float SoundVolume = 1.f;
+	FOKAudioMasterClock AudioMasterClock;
 	void StopSceneAudio();
 	void UpdateSceneAudio();
+	/** Resolved path of Document->SoundFile (relative to the scene file's folder or project root when not absolute); empty when missing. */
+	FString SceneSoundFile() const;
 	/** The sound menu's files: the scene's BGM (the library's Ogg) and its outside sound (relative to the scene file's
 	 *  folder when not absolute); empty when there is none or the file is missing. */
 	FString BgmFile() const;
@@ -349,11 +353,12 @@ private:
 	/** r.AllowOcclusionQueries before the studio turned it off (restored on Stop; INDEX_NONE: not changed). */
 	int32 SavedOcclusionQueries = INDEX_NONE;
 	TWeakObjectPtr<class UAudioComponent> SceneAudio;
+	TWeakObjectPtr<class UKKSpeechWave> SceneAudioWave;
 	TSharedPtr<const struct FKKSpeechPcm, ESPMode::ThreadSafe> SceneAudioPcm;
 	FString LoadedSoundFile;
-	float AudioStartTimelineTime = -1000.f;
-	double AudioStartWallSeconds = 0.0;
-	float AudioStartSpeed = 1.f;
+	bool bSteppingTimelineFromClock = false;
+	bool EnsureSceneAudioPcmLoaded();
+	void PollSceneAudioHardwareClock();
 	/** A sound of the sound menu (FOKSceneSound): plays on its own, apart from the timeline; decoded on a worker. */
 	struct FStudioSound
 	{

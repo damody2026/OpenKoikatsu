@@ -4,6 +4,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformTime.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Dom/JsonObject.h"
@@ -32,6 +33,8 @@ public:
     int32 OnGenerateAudio(float* Out,int32 Count) override {
         FMemory::Memzero(Out,Count*sizeof(float));
         const int32 Frames=Pcm->Samples.Num()/Pcm->Channels;
+        const double StartAudioSeconds=Pcm->SampleRate>0?Position/double(Pcm->SampleRate):0.;
+        const double NowWallSeconds=FPlatformTime::Seconds();
         int32 Taken=0;
         while(Taken+Pcm->Channels<=Count && Position<Frames){
             const int32 I=int32(Position),J=FMath::Min(I+1,Frames-1);
@@ -42,7 +45,10 @@ public:
             Taken+=Pcm->Channels;Position+=Step;++Rendered;
         }
         float Sum=0.f;for(float V:Window)Sum+=V*V;
-        Meter->Rms.Store(FMath::Sqrt(Sum/1024.f));Meter->RenderedFrames.Store(Rendered);
+        if(Meter){
+            Meter->Rms.Store(FMath::Sqrt(Sum/1024.f));Meter->RenderedFrames.Store(Rendered);
+            Meter->WriteClockAnchor(StartAudioSeconds,NowWallSeconds,Position>=Frames);
+        }
         return Taken;
     }
     bool IsFinished() const override{return Position>=Pcm->Samples.Num()/Pcm->Channels;}
@@ -118,11 +124,11 @@ FLinesResult LoadLinesUncached(const FString& Root,int32 Personality) {
 
 bool KKSpeech::DecodeOgg(const FString& Path,TSharedPtr<const FKKSpeechPcm,ESPMode::ThreadSafe>& Out,FString& Error) {
     Out.Reset();Error.Reset();const int64 Size=IFileManager::Get().FileSize(*Path);
-    if(Size<4||Size>16*1024*1024){Error=TEXT("音檔不存在、為空或超過16MiB");return false;}
+    if(Size<4||Size>128*1024*1024){Error=TEXT("音檔不存在、為空或超過128MiB");return false;}
     TArray<uint8> Bytes;
     if(!FFileHelper::LoadFileToArray(Bytes,*Path)||FMemory::Memcmp(Bytes.GetData(),"OggS",4)!=0){Error=TEXT("音檔不是有效的OGG Vorbis");return false;}
     LoadVorbisLibraries();FVorbisAudioInfo Decoder;FSoundQualityInfo Quality{};
-    if(!Decoder.ReadCompressedInfo(Bytes.GetData(),Bytes.Num(),&Quality)||Quality.NumChannels<1||Quality.NumChannels>2||Quality.SampleRate<8000||Quality.SampleRate>96000||Quality.SampleDataSize==0||Quality.SampleDataSize>64*1024*1024||Quality.SampleDataSize%(2*Quality.NumChannels)!=0){
+    if(!Decoder.ReadCompressedInfo(Bytes.GetData(),Bytes.Num(),&Quality)||Quality.NumChannels<1||Quality.NumChannels>2||Quality.SampleRate<8000||Quality.SampleRate>96000||Quality.SampleDataSize==0||Quality.SampleDataSize>512*1024*1024||Quality.SampleDataSize%(2*Quality.NumChannels)!=0){
         Error=TEXT("OGG解碼失敗或聲道、取樣率、PCM長度不受支援");return false;
     }
     auto Pcm=MakeShared<FKKSpeechPcm,ESPMode::ThreadSafe>();Pcm->SampleRate=Quality.SampleRate;Pcm->Channels=Quality.NumChannels;

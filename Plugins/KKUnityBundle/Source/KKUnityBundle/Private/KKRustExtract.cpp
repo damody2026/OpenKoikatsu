@@ -1,4 +1,4 @@
-﻿#include "KKRustExtract.h"
+#include "KKRustExtract.h"
 #include "Misc/ConfigCacheIni.h"
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
@@ -1043,6 +1043,14 @@ float FOkSession::EyeMaterialSetting(int32 PartIndex, int32 Setting) const
 bool FOkSession::SetEyeGaze(float LeftH, float RightH, float Vertical)
 {
 	return Handle && GRust.set_eye_gaze && GRust.set_eye_gaze(Handle,LeftH,RightH,Vertical)==0;
+}
+bool FOkSession::SetBlush(float Rate)
+{
+	return Handle && ok_session_set_blush(Handle, Rate) == 0;
+}
+bool FOkSession::SetIrisSmall(float Rate)
+{
+	return Handle && ok_session_set_iris_small(Handle, Rate) == 0;
 }
 int32 FOkSession::EyeLookPatternCount() const
 {

@@ -1130,12 +1130,13 @@ pub(crate) unsafe extern "C" fn session_open(
     err_buf: *mut c_char,
     err_cap: i32,
 ) -> i32 {
+    let card_for_meta = cstr_opt(card_path_utf8);
     let run = crate::run_no_panic(|| {
         // A foreground open makes background opens (clothing variant warm-up) yield the card pack mount.
         let _foreground = crate::ForegroundOpen::begin();
         let _defer = crate::oklib::DeferCacheStore::begin();
         let game = cstr_opt(game_root_utf8).ok_or_else(|| "null game_root".to_string())?;
-        let card = cstr_opt(card_path_utf8);
+        let card = card_for_meta.clone();
         // Original KKS card with a base library configured: the library plus the card's zipmods.
         if let Some(card) = card.as_deref() {
             if let Some(result) = crate::oklib::open_original_card(std::path::Path::new(&game), std::path::Path::new(card), outfit) {
@@ -1166,6 +1167,11 @@ pub(crate) unsafe extern "C" fn session_open(
         Ok(mut sess) => {
             // Her belly bulge targets (belly_bulge.rs), on every way a body opens: original cards, OK cards, packs.
             crate::belly_bulge::add(&mut sess);
+            if sess.active_shoe_meta.is_none() {
+                if let Some(cp) = card_for_meta.as_deref() {
+                    crate::mmdd::populate_session_shoe_meta(&mut sess, std::path::Path::new(cp), outfit);
+                }
+            }
             if out.is_null() {
                 write_err(err_buf, err_cap, "null out");
                 return 1;
@@ -1508,18 +1514,8 @@ pub(crate) unsafe extern "C" fn eye_material_setting(s:*mut OkSession,part:i32,s
     runtime.and_then(|r|r.settings.get(setting as usize)).copied().unwrap_or(0.)
 }
 pub(crate) unsafe extern "C" fn set_eye_gaze(s:*mut OkSession,left:f32,right:f32,vertical:f32)->i32 {
-    if !left.is_finite() || !right.is_finite() || !vertical.is_finite() {return 1;}
     let Some(session)=sess_ref(s) else{return 1;};
-    for part in &mut session.parts {
-        if let Some(runtime)=part.iris_runtime.as_ref() {
-            let h=if runtime.settings[0]==1. {right}else{left};
-            runtime.apply(&mut part.uvs,h.clamp(-1.,1.),vertical.clamp(-1.,1.));
-            if let Some(draw)=part.eye_draw.as_mut() {
-                draw.apply(runtime.st(h.clamp(-1.,1.),vertical.clamp(-1.,1.)),&runtime.raw_uvs,&mut part.uv2,&mut part.uv3);
-            }
-        }
-    }
-    0
+    if session.set_eye_gaze_rates(left,right,vertical) {0} else {1}
 }
 unsafe extern "C" fn eye_look_pattern_count(s:*mut OkSession)->i32 {
     sess_ref(s).and_then(|s|s.eye_look_config.as_ref()).map_or(0,|c|c.patterns.len() as i32)
@@ -2713,4 +2709,16 @@ pub unsafe extern "C" fn ok_okmodel_texture_png(lib: *const c_char, id: *const c
         Ok(png) => { if !out.is_null() && cap as usize >= png.len() { ptr::copy_nonoverlapping(png.as_ptr(), out, png.len()); } png.len() as i32 }
         Err(_) => -1,
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ok_session_set_blush(s: *mut OkSession, rate: f32) -> i32 {
+    let Some(session) = sess_ref(s) else { return 1; };
+    if session.set_blush(rate) { 0 } else { 1 }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ok_session_set_iris_small(s: *mut OkSession, rate: f32) -> i32 {
+    let Some(session) = sess_ref(s) else { return 1; };
+    if session.set_iris_small(rate) { 0 } else { 1 }
 }

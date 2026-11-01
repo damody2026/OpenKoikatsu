@@ -399,7 +399,11 @@ namespace
 					if ((*Status)->TryGetNumberField(TEXT("coordinate"), Coordinate) && Coordinate >= 0) C.Outfit = Coordinate;
 					const TArray<TSharedPtr<FJsonValue>>* Clothes = nullptr;
 					if ((*Status)->TryGetArrayField(TEXT("clothes_state"), Clothes) && Clothes->Num() > 0)
+					{
 						for (int32 Part = 0; Part < FMath::Min(Clothes->Num(), C.ClothesStates.Num()); ++Part) C.ClothesStates[Part] = uint8(FMath::Clamp(int32((*Clothes)[Part]->AsNumber()), 0, 3));
+						// ChaFileStatus.clothesState in KK/KKS has 8 entries ([7] = Shoes), whereas C.ClothesStates has 9 ([7] = inner, [8] = outer).
+						if (Clothes->Num() == 8 && C.ClothesStates.Num() >= 9) C.ClothesStates[8] = C.ClothesStates[7];
+					}
 					// The face the scene was saved with (ChaFileStatus eyebrowPtn / eyesPtn / mouthPtn), and where the eyes and neck look:
 					// eyes 1 at the camera (0 straight ahead), neck 0 at the camera (3, the default, as the animation).
 					int32 Face = -1;

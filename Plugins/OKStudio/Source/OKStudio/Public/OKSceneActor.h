@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -60,6 +60,8 @@ public:
     void AdvanceCharacterFrames(float DeltaSeconds, bool bAdvancePhase);
     /** Evidence capture holds the saved animation phase while rendering settles. */
     bool bPauseAnimations = false;
+    /** True when UOKStudioGame drives character animation time from TimelineTime / AudioMasterClock (even without keyframe tracks). */
+    bool bTimelineDriven = false;
 	/** Poses a character's animation at `Time` seconds of the scene timeline (its own start time and speed applied). */
 	void SetAnimationTime(int32 Id, float Time);
 	/** The next Sync builds the object again (after something changed its preview outside the document). */
@@ -67,6 +69,8 @@ public:
 	/** Plays another Studio animation (OK animation library) on a shown character in place, without building it again;
 	 *  the document object follows. */
 	bool SetCharacterAnimation(int32 Id, int32 Kind, int32 Group, int32 Category, int32 No, FString& OutError);
+	/** Records an active live .vmd source for a character so rebuilding (outfit / shoe on-off) re-solves ShoesDetect. */
+	void SetActiveVmdSource(int32 Id, const FString& VmdFile, const FString& OkAnimRelPath);
 
 	/** The preview actor showing a character or item object. */
 	AKKPreviewActor* PreviewOf(int32 Id) const;
@@ -217,6 +221,12 @@ private:
 	uint32 PlaceGeneration = 1;
 	FTransform PlacedActorTransform;
 	TMap<int32, FShown> Shown;
+	struct FActiveVmdSource
+	{
+		FString VmdFile;
+		FString OkAnimRelPath;
+	};
+	TMap<int32, FActiveVmdSource> ActiveVmdSources;
 	int32 ShownMap = -1;
 	TArray<TWeakObjectPtr<AKKPreviewActor>> ShownMapPreviews;
 	void SyncMap();

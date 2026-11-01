@@ -118,11 +118,13 @@ IK_TOE_L=IK_FOOT_L:左つま先ＩＫ:rpi:i,TOE_L,FOOT_L
 UPLEG_D_R=BACK_HIPS_C_R:右足D:rt:tr,1,UPLEG_R
 LOWLEG_D_R=UPLEG_D_R:右ひざD:rt:tr,1,LOWLEG_R
 FOOT_D_R=LOWLEG_D_R:右足首D:rt:tr,1,FOOT_R
-TOE_EX_R=FOOT_D_R:右足先EX:r
+HEEL_EX_R=FOOT_D_R:右踵EX:r
+TOE_EX_R=HEEL_EX_R:右足先EX:r
 UPLEG_D_L=BACK_HIPS_C_L:左足D:rt:tr,1,UPLEG_L
 LOWLEG_D_L=UPLEG_D_L:左ひざD:rt:tr,1,LOWLEG_L
 FOOT_D_L=LOWLEG_D_L:左足首D:rt:tr,1,FOOT_L
-TOE_EX_L=FOOT_D_L:左足先EX:r
+HEEL_EX_L=FOOT_D_L:左踵EX:r
+TOE_EX_L=HEEL_EX_L:左足先EX:r
 MOUTH_BASE=HEAD:口ベース:rp
 EYEBROW_BASE=HEAD:眉ベース:rp
 
@@ -208,10 +210,12 @@ IK_TOE_L=bbs:cf_j_leg03_L:cf_j_toes_L:1.4
 UPLEG_D_R=b:cf_j_thigh00_R
 LOWLEG_D_R=b:cf_j_leg01_R
 FOOT_D_R=b:cf_j_leg03_R
+HEEL_EX_R=b:cf_j_foot_R
 TOE_EX_R=b:cf_j_toes_R
 UPLEG_D_L=b:cf_j_thigh00_L
 LOWLEG_D_L=b:cf_j_leg01_L
 FOOT_D_L=b:cf_j_leg03_L
+HEEL_EX_L=b:cf_j_foot_L
 TOE_EX_L=b:cf_j_toes_L
 MOUTH_BASE=b:cf_J_MouthBase_ty
 EYEBROW_BASE=b:cf_J_Mayu_ty
@@ -236,10 +240,12 @@ HAND_L=cf_j_hand_L
 UPLEG_D_R=cf_j_thigh00_R
 LOWLEG_D_R=cf_j_leg01_R
 FOOT_D_R=cf_j_leg03_R
+HEEL_EX_R=cf_j_foot_R
 TOE_EX_R=cf_j_toes_R
 UPLEG_D_L=cf_j_thigh00_L
 LOWLEG_D_L=cf_j_leg01_L
 FOOT_D_L=cf_j_leg03_L
+HEEL_EX_L=cf_j_foot_L
 TOE_EX_L=cf_j_toes_L
 FIG_THUMB01_R=cf_j_thumb01_R
 FIG_THUMB02_R=cf_j_thumb02_R
@@ -1457,7 +1463,7 @@ pub fn standard_kk_skeleton() -> Option<Skeleton> {
         .clone()
 }
 
-fn load_standard_kk_skeleton_uncached() -> Option<Skeleton> {
+fn mmdd_resource_candidates() -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     if let Some(active) = crate::oklib::active_dir() {
         candidates.push(active);
@@ -1483,6 +1489,31 @@ fn load_standard_kk_skeleton_uncached() -> Option<Skeleton> {
         candidates.push(PathBuf::from(game));
     }
     candidates.push(PathBuf::from(r"E:\Koikatu"));
+    candidates.push(PathBuf::from(r"E:\01_Games\KKS\KoikatuSunshine"));
+    candidates
+}
+
+fn graft_head_onto_body(body: &mut Skeleton, head: &Skeleton) {
+    let Some((&cf_s_head_id, _)) = body.tfs.iter().find(|(_, t)| t.name == "cf_s_head") else {
+        return;
+    };
+    let mut id_map = HashMap::new();
+    for (i, &hid) in head.tfs.keys().enumerate() {
+        id_map.insert(hid, -10_000 - (i as i64));
+    }
+    for (&hid, htf) in &head.tfs {
+        let mut cloned = htf.clone();
+        cloned.parent = match htf.parent {
+            Some(p) if id_map.contains_key(&p) => Some(id_map[&p]),
+            _ => Some(cf_s_head_id),
+        };
+        body.tfs.insert(id_map[&hid], cloned);
+    }
+    body.rebuild_worlds();
+}
+
+fn load_standard_kk_skeleton_uncached() -> Option<Skeleton> {
+    let candidates = mmdd_resource_candidates();
 
     static CACHED_SKEL: OnceLock<Option<Skeleton>> = OnceLock::new();
     if let Some(cached) = CACHED_SKEL.get() {
@@ -1524,28 +1555,682 @@ fn load_standard_kk_skeleton_uncached() -> Option<Skeleton> {
                     .and_then(|p| p.skeleton_for_prefab_name("p_cf_head_bone"))
             })
         {
-            if let Some((&cf_s_head_id, _)) =
-                body.tfs.iter().find(|(_, t)| t.name == "cf_s_head")
-            {
-                let mut id_map = HashMap::new();
-                for (i, &hid) in head.tfs.keys().enumerate() {
-                    id_map.insert(hid, -10_000 - (i as i64));
-                }
-                for (&hid, htf) in &head.tfs {
-                    let mut cloned = htf.clone();
-                    cloned.parent = match htf.parent {
-                        Some(p) if id_map.contains_key(&p) => Some(id_map[&p]),
-                        _ => Some(cf_s_head_id),
-                    };
-                    body.tfs.insert(id_map[&hid], cloned);
-                }
-                body.rebuild_worlds();
-            }
+            graft_head_onto_body(&mut body, &head);
         }
         let _ = CACHED_SKEL.set(Some(body.clone()));
         return Some(body);
     }
     None
+}
+
+struct MmddShapeTemplate {
+    female_body_rest: Skeleton,
+    male_body_rest: Option<Skeleton>,
+    head_rest: Option<Skeleton>,
+    body_keys: HashMap<String, Vec<crate::shape::Keyframe>>,
+    head_keys: HashMap<String, Vec<crate::shape::Keyframe>>,
+    correct: Vec<crate::shape::CorrectInfo>,
+}
+
+fn mmdd_shape_template() -> Option<&'static MmddShapeTemplate> {
+    static TEMPLATE: OnceLock<Option<MmddShapeTemplate>> = OnceLock::new();
+    TEMPLATE
+        .get_or_init(|| {
+            for root in mmdd_resource_candidates() {
+                if root.join("oklib.json").is_file() {
+                    let _ = crate::oklib::ensure_library(&root);
+                }
+                let studio_base = root.join("abdata/studio/base/00.unity3d");
+                let oo_base = root.join("abdata/chara/oo_base.unity3d");
+                let bo_head = root.join("abdata/chara/bo_head_00.unity3d");
+                let parsed_studio = crate::gamefs::read_source(&studio_base)
+                    .ok()
+                    .map(crate::unity::parse_bundle_cached);
+                let Some(parsed_oo) = crate::gamefs::read_source(&oo_base)
+                    .ok()
+                    .map(crate::unity::parse_bundle_cached)
+                else {
+                    continue;
+                };
+                let body_keys =
+                    crate::shape::load_keys_named(&root, "chara/oo_base.unity3d", "cf_anmShapeBody");
+                if body_keys.is_empty() {
+                    continue;
+                }
+                let oo_bone_prefab = parsed_oo.skeleton_for_prefab_name("p_cf_body_bone");
+                let studio_bone_prefab = parsed_studio
+                    .as_ref()
+                    .and_then(|p| p.skeleton_for_prefab_name("p_cf_body_bone"));
+
+                let prep_body_rest = |mut sk: Skeleton| -> Skeleton {
+                    if let Some(ref bp) = oo_bone_prefab {
+                        sk.merge_missing_tree_transforms(bp);
+                    }
+                    if let Some(ref sp) = studio_bone_prefab {
+                        sk.merge_missing_tree_transforms(sp);
+                    }
+                    sk.include_tree_bones();
+                    crate::pose::apply_low_poly_body_references(&mut sk);
+                    sk.rebuild_worlds();
+                    sk
+                };
+
+                let (female_meshes, _) = parsed_oo.meshes_for_maindata("p_cf_body_00");
+                let Some(female_raw) = female_meshes
+                    .iter()
+                    .find(|m| m.name.eq_ignore_ascii_case("o_body_a"))
+                    .and_then(|m| m.smr_skel.clone())
+                    .or_else(|| studio_bone_prefab.clone())
+                    .or_else(|| oo_bone_prefab.clone())
+                else {
+                    continue;
+                };
+                let female_body_rest = prep_body_rest(female_raw);
+
+                let (male_meshes, _) = parsed_oo.meshes_for_maindata("p_cm_body_00");
+                let male_body_rest = male_meshes
+                    .iter()
+                    .find(|m| m.name.eq_ignore_ascii_case("o_body_a"))
+                    .and_then(|m| m.smr_skel.clone())
+                    .map(prep_body_rest);
+
+                let parsed_head = crate::gamefs::read_source(&bo_head)
+                    .ok()
+                    .map(crate::unity::parse_bundle_cached);
+                let mut head_rest = parsed_studio
+                    .as_ref()
+                    .and_then(|p| p.skeleton_for_prefab_name("p_cf_head_bone"))
+                    .or_else(|| parsed_oo.skeleton_for_prefab_name("p_cf_head_bone"));
+                if let Some(ref mut h) = head_rest {
+                    h.include_tree_bones();
+                    if let Some(mesh_skel) = parsed_head
+                        .as_ref()
+                        .and_then(|p| p.skeleton_for_prefab_name("p_cf_head_00"))
+                    {
+                        crate::pose::copy_same_name_transform(h, &mesh_skel);
+                    }
+                    h.rebuild_worlds();
+                }
+                let head_keys = crate::shape::load_head_keys_named(&bo_head, "cf_anmShapeHead_00");
+                let correct = crate::shape::load_correct_info(&root);
+
+                return Some(MmddShapeTemplate {
+                    female_body_rest,
+                    male_body_rest,
+                    head_rest,
+                    body_keys,
+                    head_keys,
+                    correct,
+                });
+            }
+            None
+        })
+        .as_ref()
+}
+
+/// Default MMDD high-heel angles (`mmddheelsext.py` `getDefaultHeelSetting()`: `[foot, heel, toes]` in degrees).
+pub const DEFAULT_HIGH_HEEL_ROT: [f32; 3] = [25.0, 15.0, -25.0];
+
+/// High-heel compensation angles (degrees around +X) and root Y height lift (metres),
+/// matching `mmddheelsext.py` `getNormalizedHeelInfo` / `vmdlib.py` `setHeelzRotation` + `setShoesOffset`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MmddHeelPreset {
+    /// `[foot_adj, heel_adj, toes_adj]` in degrees applied to `foot_d_l/r`, `heel_ex_l/r`, `toe_ex_l/r`.
+    pub rot: [f32; 3],
+    /// Root Y offset in metres (`ShoesOffset[1]`).
+    pub height: f32,
+}
+
+/// Active coordinate shoe status for MMDD `ShoesDetect` (`mmddheelsext.py` `HasShoes` / `IsShoesActive` / `getHeelInfo`).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MmddShoeState {
+    /// Whether the outfit's active shoe slot (`shoesType`: 0 indoor -> 7, 1 outdoor -> 8) has a non-dummy shoe assigned.
+    pub has_shoes: bool,
+    /// Whether shoes are currently worn (`clothesState[7] == 0` / `clothes_shoes` visible).
+    pub shoes_active: bool,
+    /// Resolved shoe display name (empty when barefoot or unresolved third-party mod).
+    pub shoe_name: String,
+    /// Auto-detected high-heel preset when the assigned shoe is a high-heel (`None` for flat shoes or barefoot).
+    pub detected_heel: Option<MmddHeelPreset>,
+}
+
+fn normalize_signed_deg(deg: f32) -> f32 {
+    let mut d = deg.rem_euclid(360.0);
+    if d > 180.0 {
+        d -= 360.0;
+    }
+    d
+}
+
+fn parse_stiletto_txt(text: &str) -> Option<Option<MmddHeelPreset>> {
+    let mut height = 0.0f32;
+    let mut angle_leg = 0.0f32;
+    let mut angle_ankle = 0.0f32;
+    let mut angle_toes: Option<f32> = None;
+    let mut any_field = false;
+    for raw_line in text.lines() {
+        let line = raw_line.trim().trim_start_matches('\u{feff}');
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') || line.starts_with("//") {
+            continue;
+        }
+        let Some((k, v)) = line.split_once('=') else {
+            continue;
+        };
+        let key = k.trim().to_ascii_lowercase();
+        let Ok(val) = v.trim().parse::<f32>() else {
+            continue;
+        };
+        if !val.is_finite() {
+            continue;
+        }
+        match key.as_str() {
+            "height" => {
+                height = val;
+                any_field = true;
+            }
+            "angleleg" | "foot" => {
+                angle_leg = normalize_signed_deg(val);
+                any_field = true;
+            }
+            "angleankle" | "heel" => {
+                angle_ankle = normalize_signed_deg(val);
+                any_field = true;
+            }
+            "angletoes" | "toes" => {
+                angle_toes = Some(normalize_signed_deg(val));
+                any_field = true;
+            }
+            _ => {}
+        }
+    }
+    if !any_field {
+        return None;
+    }
+    if angle_leg.abs() <= 3.5 && angle_ankle.abs() <= 3.5 && height.abs() <= 0.012 {
+        // Stiletto `.txt` exists and explicitly marks this shoe as flat (e.g. vanilla ローファー / 上履き).
+        return Some(None);
+    }
+    let toes = angle_toes.unwrap_or_else(|| if angle_ankle.abs() > 3.5 { -angle_ankle } else { 0.0 });
+    Some(Some(MmddHeelPreset {
+        rot: [angle_leg, angle_ankle, toes],
+        height,
+    }))
+}
+
+fn load_stiletto_txt_preset(shoe_name: &str, search_roots: &[&Path]) -> Option<Option<MmddHeelPreset>> {
+    let trimmed = shoe_name.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut candidate_dirs: Vec<PathBuf> = Vec::new();
+    if let Ok(custom_dir) = std::env::var("OK_STILETTO_DIR") {
+        let p = PathBuf::from(custom_dir.trim());
+        if !p.as_os_str().is_empty() {
+            candidate_dirs.push(p.clone());
+            candidate_dirs.push(p.join("Heels"));
+        }
+    }
+    let mut roots: Vec<PathBuf> = search_roots
+        .iter()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(|p| p.to_path_buf())
+        .collect();
+    if let Ok(env_root) = std::env::var("OK_GAME_ROOT") {
+        let p = PathBuf::from(env_root.trim());
+        if !p.as_os_str().is_empty() {
+            roots.push(p);
+        }
+    }
+    for root in roots {
+        let mut cur: Option<&Path> = Some(root.as_path());
+        for _ in 0..5 {
+            let Some(dir) = cur else { break };
+            for rel in [
+                "BepInEx/config/Stiletto/Heels",
+                "BepInEx/config/Stiletto",
+                "BepInEx/Stiletto/Heels",
+                "BepInEx/Stiletto",
+            ] {
+                let c = dir.join(rel);
+                if !candidate_dirs.contains(&c) {
+                    candidate_dirs.push(c);
+                }
+            }
+            cur = dir.parent();
+        }
+    }
+    let filenames = if trimmed == shoe_name {
+        vec![format!("{trimmed}.txt"), format!("{trimmed} .txt")]
+    } else {
+        vec![
+            format!("{shoe_name}.txt"),
+            format!("{trimmed}.txt"),
+            format!("{trimmed} .txt"),
+        ]
+    };
+    for dir in candidate_dirs {
+        for fname in &filenames {
+            let p = dir.join(fname);
+            if let Ok(text) = std::fs::read_to_string(&p) {
+                if let Some(res) = parse_stiletto_txt(&text) {
+                    return Some(res);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Resolves a high-heel preset for a shoe item from Stiletto `.txt` configs or built-in Stiletto / high-heel mod presets.
+/// Returns `None` for vanilla KK/KKS flat shoes (`ローファー`, `上履き`, `運動靴`, `ショートブーツ`, vanilla `パンプス`, etc.).
+pub fn detect_high_heel_preset(
+    shoe_name: &str,
+    main_data: &str,
+    mod_guid: &str,
+    search_roots: &[&Path],
+) -> Option<MmddHeelPreset> {
+    if let Some(from_txt) = load_stiletto_txt_preset(shoe_name, search_roots) {
+        return from_txt;
+    }
+    let n = shoe_name.trim().to_lowercase();
+    let m = main_data.trim().to_ascii_lowercase();
+    let g = mod_guid.trim().to_ascii_lowercase();
+
+    // Explicit flat-shoe guard when not tagged Stiletto / high-heel
+    let has_stiletto_tag = n.contains("stiletto") || g.contains("stiletto") || m.contains("stiletto");
+    if has_stiletto_tag {
+        if n.contains("platform") || n.contains("厚底") {
+            return Some(MmddHeelPreset {
+                rot: [28.0, 20.0, -28.0],
+                height: 0.085,
+            });
+        }
+        if n.contains("sandal") || n.contains("サンダル") || n.contains("mule") || n.contains("ミュール") {
+            return Some(MmddHeelPreset {
+                rot: [25.0, 18.0, -26.0],
+                height: 0.068,
+            });
+        }
+        if n.contains("boot") || n.contains("ブーツ") {
+            return Some(MmddHeelPreset {
+                rot: [24.0, 16.0, -24.0],
+                height: 0.065,
+            });
+        }
+        return Some(MmddHeelPreset {
+            rot: [24.5, 19.5, -26.3],
+            height: 0.062,
+        });
+    }
+    if n.contains("vanilla heels a") {
+        return Some(MmddHeelPreset {
+            rot: [20.0, 15.0, -20.0],
+            height: 0.055,
+        });
+    }
+    if n.contains("vanilla heels b") {
+        return Some(MmddHeelPreset {
+            rot: [25.0, 18.0, -25.0],
+            height: 0.065,
+        });
+    }
+    if n.contains("vanilla heels c") {
+        return Some(MmddHeelPreset {
+            rot: [30.0, 20.0, -28.0],
+            height: 0.075,
+        });
+    }
+    let sep_heel = n.contains("(sep)")
+        && (n.contains("heel")
+            || n.contains("pump")
+            || n.contains("パンプス")
+            || n.contains("ヒール")
+            || n.contains("ミュール"));
+    let high_heel_kw = n.contains("high heel")
+        || n.contains("highheel")
+        || n.contains("high_heel")
+        || n.contains("ハイヒール")
+        || n.contains("ピンヒール")
+        || n.contains("(ヒール)")
+        || n.contains("（ヒール）")
+        || n.contains("ヒールパンプス")
+        || n.contains("ヒールブーツ")
+        || n.contains("ヒールサンダル")
+        || n.contains("高跟")
+        || g.contains("highheel")
+        || g.contains("high_heel")
+        || m.contains("highheel")
+        || m.contains("high_heel");
+    if sep_heel || high_heel_kw {
+        return Some(MmddHeelPreset {
+            rot: DEFAULT_HIGH_HEEL_ROT,
+            height: 0.060,
+        });
+    }
+    None
+}
+
+fn candidate_catalog_roots(extra_roots: &[&Path]) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    let mut push_unique = |p: PathBuf| {
+        if !p.as_os_str().is_empty() && !out.contains(&p) {
+            out.push(p);
+        }
+    };
+    for r in extra_roots {
+        push_unique(r.to_path_buf());
+    }
+    if let Ok(env_root) = std::env::var("OK_GAME_ROOT") {
+        push_unique(PathBuf::from(env_root.trim()));
+    }
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if let Some(proj_root) = manifest_dir.parent().and_then(Path::parent) {
+        push_unique(proj_root.join("Content/IndependentResources/base_v1"));
+        push_unique(proj_root.join("Content/IndependentResources/native_v1"));
+    }
+    out
+}
+
+/// Resolves `(has_non_dummy_slot, entry_name, main_data, mod_guid)` for `card`'s active shoe slot in `outfit`.
+pub fn resolve_card_shoe_meta(
+    card: &crate::card::CardInfo,
+    outfit: i32,
+    shoes_type: u8,
+    search_roots: &[&Path],
+) -> Option<(String, String, String)> {
+    let kind = if shoes_type == 0 || card.clothes_ids.len() <= 8 {
+        7usize
+    } else {
+        8usize
+    };
+    let cid = card.clothes_ids.get(kind).copied().unwrap_or(0);
+    let prop_name = crate::accessories::CLOTHES_PROP.get(kind).copied()?;
+    let prop = format!("outfit{}.ChaFileClothes.{prop_name}", outfit.max(0));
+    let resolve = card.resolves.iter().find(|r| r.property == prop);
+    if resolve.is_none() && cid == 0 {
+        return None;
+    }
+    let guid = resolve.map(|r| r.mod_id.clone()).unwrap_or_default();
+    let roots = candidate_catalog_roots(search_roots);
+    for root in &roots {
+        let chara_dir = root.join("abdata/list/characustom");
+        let mods_dir = root.join("mods");
+        if !chara_dir.exists() && !mods_dir.exists() {
+            continue;
+        }
+        let vanilla = crate::list::load_characustom_dir_shared(&chara_dir);
+        let mod_catalog = crate::list::load_mods_catalog_shared(&mods_dir);
+        let guid_index = if guid.is_empty() || !mods_dir.exists() {
+            HashMap::new()
+        } else {
+            let mut wanted = std::collections::HashSet::new();
+            wanted.insert(guid.clone());
+            crate::mods::find_guids(&mods_dir, Some(&wanted))
+        };
+        let slots = crate::accessories::select_card_clothes(
+            card,
+            outfit.max(0),
+            &vanilla,
+            &mod_catalog,
+            &guid_index,
+        );
+        if let Some(Some((entry, resolved_guid, _))) = slots.get(kind) {
+            if crate::is_dummy_part(&entry.main_data, Some(&entry.name)) {
+                return None;
+            }
+            return Some((entry.name.clone(), entry.main_data.clone(), resolved_guid.clone()));
+        }
+    }
+    // Unresolved mod shoe (e.g. third-party zipmod absent on this machine): still has a shoe item assigned.
+    Some((String::new(), String::new(), guid))
+}
+
+/// Populates `session.active_shoe_meta` when opening via cached/OK-card paths where `SessionBlob` did not store it.
+pub(crate) fn populate_session_shoe_meta(
+    session: &mut crate::session::OkSession,
+    card_path: &Path,
+    outfit: i32,
+) {
+    let Ok(bytes) = crate::gamefs::read(card_path).or_else(|_| std::fs::read(card_path)) else {
+        return;
+    };
+    let eff_outfit = outfit.max(0);
+    let Ok(info) = crate::card::parse_card_bytes(&bytes, eff_outfit) else {
+        return;
+    };
+    let shoes_type = crate::unity::requested_shoes_type();
+    let mut roots: Vec<&Path> = Vec::new();
+    if !session.game_root.as_os_str().is_empty() {
+        roots.push(session.game_root.as_path());
+    }
+    if let Some(parent) = card_path.parent() {
+        roots.push(parent);
+    }
+    session.active_shoe_meta = resolve_card_shoe_meta(&info, eff_outfit, shoes_type, &roots);
+}
+
+/// Per-character shaped skeleton and scale context matching KKS `vmdlib.py` `bindChara` / `createVmdBone`.
+#[derive(Clone)]
+pub struct MmddCharacterRig {
+    /// Pre-ABMX shaped body skeleton (matches `OkSession::body_shaped`, without grafted head nodes).
+    pub body_shaped: Skeleton,
+    /// Live shaped skeleton in `BodyTop`/`ChaControl` space (post-Studio limb corrections + ABMX + grafted head).
+    pub live_rest: Skeleton,
+    pub abm: Vec<crate::abmx::AbmBone>,
+    pub sex: i32,
+    /// `cf_n_height.localScale.y` on `live_rest`.
+    pub height_scale: f32,
+    /// `oiCharInfo.changeAmount.scale.y` (defaults to `1.0`).
+    pub obj_scale_y: f32,
+    /// Active shoe & `ShoesDetect` state for this character.
+    pub shoe_state: MmddShoeState,
+}
+
+impl MmddCharacterRig {
+    pub fn build(
+        body_shaped: Skeleton,
+        head_posed: Option<&Skeleton>,
+        abm: Vec<crate::abmx::AbmBone>,
+        sex: i32,
+        obj_scale_y: f32,
+    ) -> Self {
+        let mut live_rest = body_shaped.clone();
+        if sex == 1 {
+            // Studio clips (`anim_scene_mode == 4`) apply `(arm=false, hand=true)` limb size corrections.
+            crate::pose::apply_scene_limb_size_corrections(&mut live_rest, false, true);
+        }
+        if !abm.is_empty() {
+            let base = crate::pose::capture_abm_baseline(&live_rest, &abm);
+            crate::pose::apply_abm(&mut live_rest, &abm, 0, &base);
+        }
+        let height_scale = find_skel_bone_ci(&live_rest, "cf_n_height")
+            .or_else(|| find_skel_bone_ci(&live_rest, "cm_n_height"))
+            .map(|(_, tf)| tf.scale[1])
+            .filter(|s| s.is_finite() && *s > 1e-4)
+            .unwrap_or(1.0);
+        let obj_scale_y = if obj_scale_y.is_finite() && obj_scale_y > 1e-4 {
+            obj_scale_y
+        } else {
+            1.0
+        };
+        if let Some(head) = head_posed {
+            graft_head_onto_body(&mut live_rest, head);
+        }
+        Self {
+            body_shaped,
+            live_rest,
+            abm,
+            sex,
+            height_scale,
+            obj_scale_y,
+            shoe_state: MmddShoeState::default(),
+        }
+    }
+
+    /// Builds a rig from a live `OkSession` (e.g. OK Studio runtime VMD load), including `ShoesDetect` shoe state.
+    pub fn from_session(session: &crate::session::OkSession, obj_scale_y: f32) -> Option<Self> {
+        let body_shaped = if let Some(bs) = session.body_shaped.as_ref() {
+            bs.clone()
+        } else if let Some(mut shaped) = session.body_rest.clone() {
+            let shapes = session.yure_policy.map_or([[true; 9]; 2], |p| p.shapes);
+            crate::shape::apply_body_shape_keys_masked(
+                &mut shaped,
+                &session.body_keys,
+                &session.shape_body,
+                &session.correct,
+                session.sex,
+                session.type_bone,
+                session.nip_stand_rate,
+                shapes,
+            );
+            crate::pose::assigned_weights_remap(&mut shaped);
+            shaped
+        } else {
+            session.body_skel.as_ref()?.clone()
+        };
+        let head_posed = session
+            .head_skel
+            .as_ref()
+            .or(session.head_full_posed.as_ref())
+            .or(session.head_rest.as_ref());
+        let mut rig = Self::build(
+            body_shaped,
+            head_posed,
+            session.abm.clone(),
+            session.sex,
+            obj_scale_y,
+        );
+        let shoes_visible = session
+            .parts
+            .iter()
+            .any(|p| p.role == "clothes_shoes" && p.render_visible);
+        let (has_shoes, shoe_name, main_data, guid) = if let Some((name, main, guid)) =
+            session.active_shoe_meta.as_ref()
+        {
+            (true, name.clone(), main.clone(), guid.clone())
+        } else if let Some(p) = session.parts.iter().find(|p| p.role == "clothes_shoes") {
+            (true, p.name.clone(), String::new(), String::new())
+        } else {
+            (false, String::new(), String::new(), String::new())
+        };
+        let mut roots: Vec<&Path> = Vec::new();
+        if !session.game_root.as_os_str().is_empty() {
+            roots.push(session.game_root.as_path());
+        }
+        let detected_heel = if has_shoes {
+            detect_high_heel_preset(&shoe_name, &main_data, &guid, &roots)
+        } else {
+            None
+        };
+        rig.shoe_state = MmddShoeState {
+            has_shoes,
+            shoes_active: has_shoes && shoes_visible,
+            shoe_name,
+            detected_heel,
+        };
+        Some(rig)
+    }
+
+    /// Builds a rig from parsed KKS `CardInfo` + optional Studio nipple override + scene object Y scale.
+    pub fn from_card_info(
+        card: &crate::card::CardInfo,
+        nip_override: Option<f32>,
+        obj_scale_y: f32,
+    ) -> Option<Self> {
+        Self::from_card_info_with_roots(
+            card,
+            card.status_coordinate.max(0),
+            nip_override,
+            obj_scale_y,
+            &[],
+        )
+    }
+
+    /// Builds a rig from parsed `CardInfo` at `outfit`, resolving active shoe metadata across `search_roots`.
+    pub fn from_card_info_with_roots(
+        card: &crate::card::CardInfo,
+        outfit: i32,
+        nip_override: Option<f32>,
+        obj_scale_y: f32,
+        search_roots: &[&Path],
+    ) -> Option<Self> {
+        let tpl = mmdd_shape_template()?;
+        let mut body_shaped = if card.sex == 0 {
+            tpl.male_body_rest
+                .clone()
+                .unwrap_or_else(|| tpl.female_body_rest.clone())
+        } else {
+            tpl.female_body_rest.clone()
+        };
+        let nip = nip_override
+            .filter(|v| *v >= 0.0)
+            .unwrap_or(card.nip_stand_rate);
+        let mut body_head_scale = [1.0f32; 3];
+        if !card.shape_body.is_empty() {
+            body_head_scale = crate::shape::apply_body_shape_keys_masked(
+                &mut body_shaped,
+                &tpl.body_keys,
+                &card.shape_body,
+                &tpl.correct,
+                card.sex,
+                card.type_bone,
+                nip,
+                [[true; 9]; 2],
+            );
+        }
+        crate::pose::assigned_weights_remap(&mut body_shaped);
+
+        let mut head_posed = tpl.head_rest.clone();
+        if let Some(ref mut h) = head_posed {
+            if !card.shape_face.is_empty() {
+                let head_correct = 1.0 / (1.0 + tpl.correct.get(2).map(|c| c.scl[1]).unwrap_or(0.0));
+                crate::shape::apply_head_shape_keys(
+                    h,
+                    &tpl.head_keys,
+                    &card.shape_face,
+                    body_head_scale,
+                    head_correct,
+                    card.type_bone,
+                );
+            }
+            crate::pose::assigned_weights_remap(h);
+            if !card.abm.is_empty() {
+                let base = crate::pose::capture_abm_baseline(h, &card.abm);
+                crate::pose::apply_abm(h, &card.abm, 0, &base);
+            }
+        }
+        let mut rig = Self::build(
+            body_shaped,
+            head_posed.as_ref(),
+            card.abm.clone(),
+            card.sex,
+            obj_scale_y,
+        );
+        let shoes_type = card.status_shoes_type;
+        let state_idx = if card.status_clothes.len() >= 9 && shoes_type == 1 {
+            8usize
+        } else {
+            7usize
+        };
+        let shoes_state_on = card.status_clothes.get(state_idx).copied().unwrap_or(0) == 0;
+        if let Some((shoe_name, main_data, guid)) =
+            resolve_card_shoe_meta(card, outfit, shoes_type, search_roots)
+        {
+            let detected_heel = detect_high_heel_preset(&shoe_name, &main_data, &guid, search_roots);
+            rig.shoe_state = MmddShoeState {
+                has_shoes: true,
+                shoes_active: shoes_state_on,
+                shoe_name,
+                detected_heel,
+            };
+        }
+        Some(rig)
+    }
+
+    /// Matches `vmdlib.py` `autoCharScale()`: `heightBone.localScale.y * oiCharInfo.changeAmount.scale.y`.
+    pub fn auto_char_scale(&self) -> f32 {
+        self.height_scale * self.obj_scale_y
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1559,11 +2244,19 @@ pub struct MotionSolveParams {
     pub delay: f32,
     pub interpolate_consecutive: bool,
     pub looping: bool,
+    pub enable_high_heelz: Option<bool>,
+    pub shoes_detect: bool,
     pub high_heels_rot: Option<[f32; 3]>,
+    /// `ShoesOffset` `[enable, shoes_on_y, shoes_off_y]` (`vmdlib.py:3487`).
+    pub shoes_offset: Option<(bool, f32, f32)>,
+    /// Optional explicit override for whether shoes are currently active (`None` reads `rig.shoe_state.shoes_active`).
+    pub shoes_active_override: Option<bool>,
     pub ik_enable: HashMap<String, bool>,
     pub custom_rot_adj: HashMap<String, V3>,
     pub custom_axis_adj: HashMap<String, V3>,
     pub custom_rot_scale: HashMap<String, f32>,
+    /// Replaces `adj.base_position` (`customizedBoneAdjust` `"posadj"` in `vmdlib.py:2776`).
+    pub custom_base_pos: HashMap<String, V3>,
     pub custom_pos_offset: HashMap<String, V3>,
     pub custom_pos_scale: HashMap<String, f32>,
     pub modified_keyframes: Vec<(String, String, u32, Option<VmdBoneKeyFrame>)>,
@@ -1572,20 +2265,275 @@ pub struct MotionSolveParams {
 impl Default for MotionSolveParams {
     fn default() -> Self {
         Self {
-            char_scale: 1.0,
+            // `<= 0.0` selects `autoCharScale()` (`height_scale * obj_scale_y`, or `1.0` when `rig` is `None`).
+            char_scale: 0.0,
             playback_speed: 1.0,
             delay: 0.0,
             interpolate_consecutive: true,
             looping: false,
+            enable_high_heelz: None,
+            shoes_detect: true,
             high_heels_rot: None,
+            shoes_offset: None,
+            shoes_active_override: None,
             ik_enable: HashMap::new(),
             custom_rot_adj: HashMap::new(),
             custom_axis_adj: HashMap::new(),
             custom_rot_scale: HashMap::new(),
+            custom_base_pos: HashMap::new(),
             custom_pos_offset: HashMap::new(),
             custom_pos_scale: HashMap::new(),
             modified_keyframes: Vec::new(),
         }
+    }
+}
+
+fn parse_shoes_offset_val(v: &serde_json::Value) -> Option<(bool, f32, f32)> {
+    if let Some(arr) = v.as_array() {
+        if arr.len() >= 3 {
+            return Some((
+                val_to_bool(&arr[0], false),
+                val_to_f32(&arr[1], 0.0),
+                val_to_f32(&arr[2], 0.0),
+            ));
+        } else if arr.len() == 2 {
+            return Some((
+                val_to_bool(&arr[0], false),
+                val_to_f32(&arr[1], 0.0),
+                0.0,
+            ));
+        }
+    } else if v.is_number() {
+        let y = val_to_f32(v, 0.0);
+        return Some((true, y, 0.0));
+    }
+    None
+}
+
+/// Resolves effective `(heel_rot, root_y_offset)` from `MotionSolveParams` and character `MmddShoeState`,
+/// matching `vmdlib.py` (`setFrame` `ShoesDetect` loop + `enableHeelzCtrl` + `setHeelzRotation` + `setShoesOffset`)
+/// and `mmddheelsext.py` (`HasShoes`, `IsShoesActive`, `getNormalizedHeelInfo`).
+pub fn resolve_high_heels_and_offset(
+    params: &MotionSolveParams,
+    rig: Option<&MmddCharacterRig>,
+) -> (Option<[f32; 3]>, Option<f32>) {
+    let shoe_state = rig.map(|r| &r.shoe_state);
+    let shoes_active = params
+        .shoes_active_override
+        .or_else(|| shoe_state.map(|s| s.shoes_active))
+        .unwrap_or(true);
+    let has_shoes = params
+        .shoes_active_override
+        .or_else(|| shoe_state.map(|s| s.has_shoes))
+        .unwrap_or(true);
+
+    let heel_rot = if params.shoes_detect {
+        if !has_shoes || !shoes_active {
+            None
+        } else if params.enable_high_heelz == Some(false)
+            && shoe_state.and_then(|s| s.detected_heel).is_none()
+        {
+            None
+        } else if let Some(rot) = params.high_heels_rot.filter(|r| {
+            params.enable_high_heelz != Some(false)
+                && (r[0].abs() > 1e-4 || r[1].abs() > 1e-4 || r[2].abs() > 1e-4)
+        }) {
+            let known_flat = shoe_state
+                .is_some_and(|s| !s.shoe_name.is_empty() && s.detected_heel.is_none());
+            if known_flat {
+                None
+            } else {
+                Some(rot)
+            }
+        } else if let Some(preset) = shoe_state.and_then(|s| s.detected_heel) {
+            Some(preset.rot)
+        } else if params.enable_high_heelz == Some(true) {
+            let known_flat = shoe_state
+                .is_some_and(|s| !s.shoe_name.is_empty() && s.detected_heel.is_none());
+            if known_flat {
+                None
+            } else {
+                Some(DEFAULT_HIGH_HEEL_ROT)
+            }
+        } else {
+            None
+        }
+    } else if params.enable_high_heelz == Some(false) {
+        None
+    } else if let Some(rot) = params.high_heels_rot {
+        Some(rot)
+    } else if params.enable_high_heelz == Some(true) {
+        Some(
+            shoe_state
+                .and_then(|s| s.detected_heel)
+                .map(|p| p.rot)
+                .unwrap_or(DEFAULT_HIGH_HEEL_ROT),
+        )
+    } else {
+        None
+    };
+
+    let root_y_offset = if let Some((enabled, on_y, off_y)) = params.shoes_offset {
+        if enabled {
+            Some(if !params.shoes_detect || (has_shoes && shoes_active) {
+                on_y
+            } else {
+                off_y
+            })
+        } else {
+            None
+        }
+    } else if params.shoes_detect && has_shoes && shoes_active {
+        shoe_state
+            .and_then(|s| s.detected_heel)
+            .filter(|_| heel_rot.is_some())
+            .map(|p| p.height)
+            .filter(|h| h.abs() > 1e-5)
+    } else {
+        None
+    };
+
+    (heel_rot, root_y_offset)
+}
+
+impl MotionSolveParams {
+    /// Parses optional JSON solver options (empty string -> defaults), returning `(params, obj_scale_y)`.
+    pub fn from_json_with_obj_scale(json: &str) -> Result<(Self, f32), String> {
+        let trimmed = json.trim();
+        if trimmed.is_empty() {
+            return Ok((Self::default(), 1.0));
+        }
+        let val: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| e.to_string())?;
+        let Some(map) = val.as_object() else {
+            return Err("params_json must be a JSON object".into());
+        };
+        let mut params = Self::default();
+        if let Some(v) = map.get("char_scale").or_else(|| map.get("charScale")) {
+            params.char_scale = val_to_f32(v, 0.0);
+        }
+        let obj_scale_y = map
+            .get("obj_scale_y")
+            .or_else(|| map.get("objScale"))
+            .map(|v| val_to_f32(v, 1.0))
+            .unwrap_or(1.0);
+        if let Some(v) = map.get("playback_speed").or_else(|| map.get("playbackSpeed")) {
+            params.playback_speed = val_to_f32(v, 1.0);
+        }
+        if let Some(v) = map.get("delay") {
+            params.delay = val_to_f32(v, 0.0);
+        }
+        if let Some(v) = map
+            .get("interpolate_consecutive")
+            .or_else(|| map.get("interCons"))
+        {
+            params.interpolate_consecutive = val_to_bool(v, true);
+        }
+        if let Some(v) = map.get("looping") {
+            params.looping = val_to_bool(v, false);
+        }
+        let explicit_shoes_detect =
+            map.get("shoes_detect").is_some() || map.get("shoesDetect").is_some();
+        if let Some(v) = map
+            .get("enable_high_heelz")
+            .or_else(|| map.get("enableHighHeelz"))
+        {
+            params.enable_high_heelz = Some(val_to_bool(v, false));
+            if !explicit_shoes_detect {
+                params.shoes_detect = false;
+            }
+        }
+        if let Some(v) = map
+            .get("shoes_detect")
+            .or_else(|| map.get("shoesDetect"))
+        {
+            params.shoes_detect = val_to_bool(v, true);
+        }
+        if let Some(v) = map
+            .get("shoes_active")
+            .or_else(|| map.get("shoesActive"))
+        {
+            params.shoes_active_override = Some(val_to_bool(v, true));
+        }
+        if let Some(v) = map
+            .get("shoes_offset")
+            .or_else(|| map.get("shoesOffset"))
+        {
+            params.shoes_offset = parse_shoes_offset_val(v);
+        }
+        if let Some(v) = map
+            .get("high_heels_rot")
+            .or_else(|| map.get("highHeels"))
+            .or_else(|| map.get("heelzRotation"))
+            .or_else(|| map.get("heelzRot"))
+        {
+            if let Some(v3) = val_to_v3(v) {
+                params.high_heels_rot = Some(v3);
+                if !explicit_shoes_detect {
+                    params.shoes_detect = false;
+                    if params.enable_high_heelz.is_none() {
+                        params.enable_high_heelz = Some(true);
+                    }
+                }
+            } else if v.is_boolean() {
+                if !explicit_shoes_detect {
+                    params.shoes_detect = false;
+                }
+                if val_to_bool(v, false) {
+                    params.high_heels_rot = Some(DEFAULT_HIGH_HEEL_ROT);
+                    if params.enable_high_heelz.is_none() {
+                        params.enable_high_heelz = Some(true);
+                    }
+                } else {
+                    params.enable_high_heelz = Some(false);
+                }
+            }
+        }
+        if let Some(serde_json::Value::Object(iko)) =
+            map.get("ik_enable").or_else(|| map.get("ikEnable"))
+        {
+            for (k, v) in iko {
+                params.ik_enable.insert(k.clone(), val_to_bool(v, true));
+            }
+        }
+        if let Some(serde_json::Value::Object(ro)) = map.get("custom_rot_adj") {
+            for (k, v) in ro {
+                if let Some(v3) = val_to_v3(v) {
+                    params.custom_rot_adj.insert(k.clone(), v3);
+                }
+            }
+        }
+        if let Some(serde_json::Value::Object(ao)) = map.get("custom_axis_adj") {
+            for (k, v) in ao {
+                if let Some(v3) = val_to_v3(v) {
+                    params.custom_axis_adj.insert(k.clone(), v3);
+                }
+            }
+        }
+        if let Some(serde_json::Value::Object(so)) = map.get("custom_rot_scale") {
+            for (k, v) in so {
+                params.custom_rot_scale.insert(k.clone(), val_to_f32(v, 1.0));
+            }
+        }
+        if let Some(serde_json::Value::Object(bo)) = map.get("custom_base_pos") {
+            for (k, v) in bo {
+                if let Some(v3) = val_to_v3(v) {
+                    params.custom_base_pos.insert(k.clone(), v3);
+                }
+            }
+        }
+        if let Some(serde_json::Value::Object(po)) = map.get("custom_pos_offset") {
+            for (k, v) in po {
+                if let Some(v3) = val_to_v3(v) {
+                    params.custom_pos_offset.insert(k.clone(), v3);
+                }
+            }
+        }
+        if let Some(serde_json::Value::Object(ps)) = map.get("custom_pos_scale") {
+            for (k, v) in ps {
+                params.custom_pos_scale.insert(k.clone(), val_to_f32(v, 1.0));
+            }
+        }
+        Ok((params, obj_scale_y))
     }
 }
 
@@ -1613,8 +2561,37 @@ pub fn solve_vmd_to_okanim(
     params: &MotionSolveParams,
     source_name: &str,
 ) -> Result<OkAnim, String> {
-    let rest = standard_kk_skeleton().ok_or("standard KK skeleton (studio/base/00.unity3d) unavailable")?;
-    let mut prep_body = rest.clone();
+    solve_vmd_to_okanim_for_rig(vmd, ini, params, source_name, None)
+}
+
+pub fn solve_vmd_to_okanim_for_rig(
+    vmd: &VmdFile,
+    ini: &CharaIniConfig,
+    params: &MotionSolveParams,
+    source_name: &str,
+    rig: Option<&MmddCharacterRig>,
+) -> Result<OkAnim, String> {
+    let fallback_rest;
+    let track_rest: &Skeleton = match rig {
+        Some(r) => &r.body_shaped,
+        None => {
+            fallback_rest = standard_kk_skeleton()
+                .ok_or("standard KK skeleton (studio/base/00.unity3d) unavailable")?;
+            &fallback_rest
+        }
+    };
+    let mut prep_body = match rig {
+        Some(r) => r.live_rest.clone(),
+        None => track_rest.clone(),
+    };
+    let inv_hips_parent_live = find_skel_bone_ci(&prep_body, "cf_j_hips")
+        .and_then(|(id, _)| prep_body.tfs.get(&id).and_then(|t| t.parent))
+        .and_then(|pid| {
+            crate::pose::mat_inverse_checked(&crate::pose::world_of_id(pid, &prep_body.tfs))
+        });
+    let hips_abm = rig
+        .and_then(|r| r.abm.iter().find(|b| b.name == "cf_j_hips").map(|b| b.for_coord(0)))
+        .filter(|d| !d.is_empty());
 
     // 1. Apply [PrepareBoneBeforeCreateDummyBone] onto prep_body
     if ini.prepare_enable_set {
@@ -1750,27 +2727,7 @@ pub fn solve_vmd_to_okanim(
         }
     }
 
-    // 4. Apply high-heels preset, custom rot/axis adjustments, then autoBoneAxisAdjust() and charScale
-    if let Some([foot_adj, heel_adj, toes_adj]) = params.high_heels_rot {
-        for bname in ["foot_r", "foot_l"] {
-            if let Some(adj) = bone_adjusts.get_mut(bname) {
-                adj.set_rot_adjustment([foot_adj, 0.0, 0.0]);
-                adj.rot_adj_auto = false;
-            }
-        }
-        for bname in ["upleg_d_r", "upleg_d_l"] {
-            if let Some(adj) = bone_adjusts.get_mut(bname) {
-                adj.set_rot_adjustment([heel_adj, 0.0, 0.0]);
-                adj.rot_adj_auto = false;
-            }
-        }
-        for bname in ["toe_ex_r", "toe_ex_l"] {
-            if let Some(adj) = bone_adjusts.get_mut(bname) {
-                adj.set_rot_adjustment([toes_adj, 0.0, 0.0]);
-                adj.rot_adj_auto = false;
-            }
-        }
-    }
+    // 4. Apply customizedBoneAdjust, then autoBoneAxisAdjust(), then high-heels & ShoesOffset (`vmdlib.py:2776-2878, 3428-3495`), and charScale
     for (bname, rot_adj) in &params.custom_rot_adj {
         if let Some(adj) = bone_adjusts.get_mut(&bname.to_ascii_lowercase()) {
             adj.set_rot_adjustment(*rot_adj);
@@ -1802,6 +2759,11 @@ pub fn solve_vmd_to_okanim(
             adj.rotation_scale = rscale;
         }
     }
+    for (bname, &bpos) in &params.custom_base_pos {
+        if let Some(adj) = bone_adjusts.get_mut(&bname.to_ascii_lowercase()) {
+            adj.base_position = bpos;
+        }
+    }
     for (bname, &poff) in &params.custom_pos_offset {
         if let Some(adj) = bone_adjusts.get_mut(&bname.to_ascii_lowercase()) {
             adj.position_offset = poff;
@@ -1812,9 +2774,51 @@ pub fn solve_vmd_to_okanim(
             adj.set_pos_local_scale(pscale);
         }
     }
-    // `prep_body` is `standard_kk_skeleton()` (unscaled `cf_n_height` = 1.0), and `.okanim`
-    // normalizes hip translations by `hips_len` so runtime characters apply their own height scale.
-    let global_scale = ini.axis_scale;
+    // `setHeelzRotation` + `setShoesOffset` run AFTER `autoBoneAxisAdjust()` in `vmdlib.py` without re-running axis propagation.
+    let (eff_heel_rot, eff_root_y_offset) = resolve_high_heels_and_offset(params, rig);
+    let has_custom_rot = |target: &str| {
+        params
+            .custom_rot_adj
+            .keys()
+            .any(|k| k.eq_ignore_ascii_case(target))
+    };
+    if let Some([foot_adj, heel_adj, toes_adj]) = eff_heel_rot {
+        for bname in ["foot_d_l", "foot_d_r"] {
+            if !has_custom_rot(bname) {
+                if let Some(adj) = bone_adjusts.get_mut(bname) {
+                    adj.set_rot_adjustment([foot_adj, 0.0, 0.0]);
+                    adj.rot_adj_auto = false;
+                }
+            }
+        }
+        for bname in ["heel_ex_l", "heel_ex_r"] {
+            if !has_custom_rot(bname) {
+                if let Some(adj) = bone_adjusts.get_mut(bname) {
+                    adj.set_rot_adjustment([heel_adj, 0.0, 0.0]);
+                    adj.rot_adj_auto = false;
+                }
+            }
+        }
+        for bname in ["toe_ex_l", "toe_ex_r"] {
+            if !has_custom_rot(bname) {
+                if let Some(adj) = bone_adjusts.get_mut(bname) {
+                    adj.set_rot_adjustment([toes_adj, 0.0, 0.0]);
+                    adj.rot_adj_auto = false;
+                }
+            }
+        }
+    }
+    if let Some(offset_y) = eff_root_y_offset {
+        if let Some(adj) = bone_adjusts.get_mut("root") {
+            adj.base_position = [0.0, offset_y, 0.0];
+        }
+    }
+    let effective_char_scale = if params.char_scale > 0.0 {
+        params.char_scale
+    } else {
+        rig.map_or(1.0, MmddCharacterRig::auto_char_scale)
+    };
+    let global_scale = ini.axis_scale * effective_char_scale;
     for adj in bone_adjusts.values_mut() {
         adj.set_pos_global_scale(global_scale);
     }
@@ -1904,19 +2908,19 @@ pub fn solve_vmd_to_okanim(
     let total_vmd_frames = (max_frame_no as usize + 1 + delay_frames.max(0.0).ceil() as usize).max(2);
     let frames = (total_vmd_frames - 1) * SUB_STEPS + 1;
 
-    // 6. Resort weight bones in `rest` tree depth order (parents before children), skipping `ROOT`
+    // 6. Resort weight bones in `track_rest` tree depth order (parents before children), skipping `ROOT`
     // so `cf_j_root` stays at identity and `cf_j_hips` captures the full root+center+groove+waist+hips motion.
-    let tracks = family_tracks(&rest);
+    let tracks = family_tracks(track_rest);
     let hips_id = tracks
         .iter()
         .find(|(_, t)| t.bone == "cf_j_hips")
         .map(|(id, _)| *id)
         .ok_or("no cf_j_hips")?;
-    let hips_rest = rest.tfs[&hips_id].pos;
+    let hips_rest = track_rest.tfs[&hips_id].pos;
     let hips_len = vlen(hips_rest).max(1e-4);
-    let hips_parent_rest_world = rest.tfs[&hips_id]
+    let hips_parent_rest_world = track_rest.tfs[&hips_id]
         .parent
-        .map(|p| crate::pose::world_rotation_of(p, &rest.tfs))
+        .map(|p| crate::pose::world_rotation_of(p, &track_rest.tfs))
         .unwrap_or([0.0, 0.0, 0.0, 1.0]);
 
     // Map each `cf_j_*` track to its driving dummy bone (if any)
@@ -1935,6 +2939,7 @@ pub fn solve_vmd_to_okanim(
             );
         }
     }
+    let hips_dummy = weight_bone_to_dummy.get("cf_j_hips").copied();
 
     let eye_l_idx = tree.by_name.get("eye_l").copied();
     let eye_r_idx = tree.by_name.get("eye_r").copied();
@@ -1945,7 +2950,7 @@ pub fn solve_vmd_to_okanim(
     let mut rot_out = Vec::with_capacity(frames * tracks.len());
     let mut hips_out = Vec::with_capacity(frames);
     let mut last_rot: Vec<Option<Quat>> = vec![None; tracks.len()];
-    let mut work_body = rest.clone();
+    let mut work_body = track_rest.clone();
 
     // 7. Sub-frame (60fps) evaluation with MMD cubic Bezier interpolation & per-step CCD IK
     for s in 0..frames {
@@ -2041,7 +3046,7 @@ pub fn solve_vmd_to_okanim(
         }
 
         // Sync dummy bones to `work_body` in parent-before-child (`tracks`) order
-        work_body.restore_from(&rest);
+        work_body.restore_from(track_rest);
         for &(id, ref track) in &tracks {
             let key = track.bone.to_ascii_lowercase();
             let Some(&(d_idx, sync_pos, sync_rot, sync_local)) = weight_bone_to_dummy.get(&key)
@@ -2093,11 +3098,24 @@ pub fn solve_vmd_to_okanim(
             last_rot[k] = Some(d);
             rot_out.push(d);
         }
-        let hips_pos = work_body
-            .tfs
-            .get(&hips_id)
-            .map(|t| t.pos)
-            .unwrap_or(hips_rest);
+        let hips_pos = if let Some((d_idx, true, _, false)) = hips_dummy {
+            let w_hips = tree.nodes[d_idx].world_pos;
+            let pos_after_abm = inv_hips_parent_live
+                .as_ref()
+                .map_or(w_hips, |inv| crate::pose::mat_vec(inv, w_hips));
+            match &hips_abm {
+                Some(d) if d.length.abs() > 1e-6 => {
+                    std::array::from_fn(|i| (pos_after_abm[i] - d.pos[i]) / d.length)
+                }
+                _ => pos_after_abm,
+            }
+        } else {
+            work_body
+                .tfs
+                .get(&hips_id)
+                .map(|t| t.pos)
+                .unwrap_or(hips_rest)
+        };
         hips_out.push([
             hips_pos[0] / hips_len,
             hips_pos[1] / hips_len,
@@ -2129,6 +3147,7 @@ pub fn solve_vmd_to_okanim(
     let mut meta = BTreeMap::new();
     meta.insert("source".into(), "mmdd_vmd".into());
     meta.insert("name".into(), source_name.to_string());
+    meta.insert("char_scale".into(), format!("{effective_char_scale:.6}"));
     let anim = OkAnim {
         family: FAMILY.into(),
         fps,
@@ -2172,6 +3191,72 @@ fn sample_vmd_morph_kfs(kfs: &[VmdMorphKeyFrame], frame_no: f32) -> f32 {
     prev.weight + (next.weight - prev.weight) * t
 }
 
+struct MmddFbsTables {
+    eyeset_to_fbs: HashMap<i32, i32>,
+    sinken_brow_ptn: i32,
+}
+
+fn mmdd_fbs_tables() -> &'static MmddFbsTables {
+    static TABLES: OnceLock<MmddFbsTables> = OnceLock::new();
+    TABLES.get_or_init(|| {
+        let mut eyeset_to_fbs: HashMap<i32, i32> =
+            HashMap::from([(22, 0), (24, 0), (25, 0), (30, 15), (31, 16)]);
+        let mut sinken_brow_ptn = 0;
+        for root in mmdd_resource_candidates() {
+            if root.join("oklib.json").is_file() {
+                let _ = crate::oklib::ensure_library(&root);
+            }
+            let mut got_any = false;
+            for &id in &[22, 24, 25, 30, 31] {
+                if let Some(set) = crate::eye_set::eye_set(&root, id) {
+                    if set.id == id {
+                        eyeset_to_fbs.insert(id, set.eyes_ptn.max(0));
+                        got_any = true;
+                    }
+                }
+            }
+            let bo_head = root.join("abdata/chara/bo_head_00.unity3d");
+            if let Ok(bytes) = crate::gamefs::read_source(&bo_head) {
+                let parsed = crate::unity::parse_bundle_cached(bytes);
+                let brow_map = parsed.face_control_patterns("p_cf_head_00", "EyebrowCtrl");
+                if let Some((_, (_, brow_ptns))) = brow_map
+                    .iter()
+                    .find(|(k, _)| k.contains("mayuge") || k.contains("face"))
+                {
+                    let (meshes, _) = parsed.meshes_for_maindata("p_cf_head_00");
+                    if let Some(m) = meshes
+                        .iter()
+                        .find(|m| m.name.to_ascii_lowercase().contains("mayuge"))
+                    {
+                        for (ptn_idx, &(c, o)) in brow_ptns.iter().enumerate() {
+                            let check = |bi: i32| -> bool {
+                                bi >= 0
+                                    && m.blend_shapes
+                                        .get(bi as usize)
+                                        .is_some_and(|(n, _)| {
+                                            let nl = n.to_ascii_lowercase();
+                                            nl.contains("sinken") || nl.contains("majime")
+                                        })
+                            };
+                            if check(c) || check(o) {
+                                sinken_brow_ptn = ptn_idx as i32;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if got_any {
+                break;
+            }
+        }
+        MmddFbsTables {
+            eyeset_to_fbs,
+            sinken_brow_ptn,
+        }
+    })
+}
+
 fn evaluate_vmd_morph_curves(
     morph_kfs: &[VmdMorphKeyFrame],
     frames: usize,
@@ -2203,8 +3288,11 @@ fn evaluate_vmd_morph_curves(
         }
     }
 
-    // Morph definitions from chara_default_1.3.ini: (vmd_name, pattern, range_start, range_end)
-    const MOUTH_DEFS: &[(&str, i32, f32, f32)] = &[
+    let tables = mmdd_fbs_tables();
+    let eyeset_ptn = |id: i32| -> i32 { tables.eyeset_to_fbs.get(&id).copied().unwrap_or(0) };
+
+    // Primary mouth shapes (vowels, tongue, stylized shapes): (vmd_name, pattern, open_at_0, open_at_1)
+    const MOUTH_PRIMARY_DEFS: &[(&str, i32, f32, f32)] = &[
         ("あ", 26, 0.0, 1.0),
         ("い", 28, 0.0, 1.0),
         ("う", 30, 0.0, 1.0),
@@ -2214,115 +3302,228 @@ fn evaluate_vmd_morph_curves(
         ("ワ", 2, 0.0, 1.0),
         ("ん", 36, 0.0, 1.0),
         ("あ２", 1, 0.0, 1.0),
-        ("にやり", 2, 0.0, 0.0),
-        ("にやり２", 2, 0.0, 0.0),
-        ("口角上げ", 2, 0.0, 0.0),
-        ("にっこり", 19, 0.0, 0.0),
-        ("口角下げ", 8, 0.0, 0.0),
+        ("あ2", 1, 0.0, 1.0),
         ("ぺろっ", 20, 0.0, 1.0),
         ("てへぺろ", 20, 0.0, 1.0),
         ("てへぺろ２", 20, 0.0, 1.0),
+        ("てへぺろ2", 20, 0.0, 1.0),
         ("∧", 7, 0.0, 0.0),
         ("▲", 38, 0.0, 1.0),
         ("ω", 37, 0.0, 0.0),
         ("ω□", 37, 1.0, 1.0),
     ];
-    const EYE_DEFS: &[(&str, i32, f32, f32)] = &[
-        ("笑い", 3, 1.0, 1.0),
-        ("笑い目", 4, 1.0, 1.0),
-        ("ウィンク", 6, 1.0, 1.0),
-        ("ウィンク２", 6, 1.0, 1.0),
-        ("ウィンク右", 5, 1.0, 1.0),
-        ("ｳｨﾝｸ２右", 5, 1.0, 1.0),
-        ("びっくり", 17, 1.0, 1.0),
-        ("じと目", 10, 1.0, 1.0),
-        ("ｷﾘｯ", 9, 1.0, 1.0),
-        ("なごみ", 31, 1.0, 1.0),
-        ("はぅ", 30, 1.0, 1.0),
-        ("はちゅ目", 22, 1.0, 1.0),
-        ("星目", 24, 1.0, 1.0),
-        ("はぁと", 25, 1.0, 1.0),
-        ("ハート", 25, 1.0, 1.0),
+
+    let sym_eye_defs: [(&str, i32); 10] = [
+        ("じと目", 10),
+        ("ｷﾘｯ", 9),
+        ("キリッ", 9),
+        ("なごみ", eyeset_ptn(31)),
+        ("はぅ", eyeset_ptn(30)),
+        ("はちゅ目", eyeset_ptn(22)),
+        ("星目", eyeset_ptn(24)),
+        ("はぁと", eyeset_ptn(25)),
+        ("ハート", eyeset_ptn(25)),
+        ("びっくり", 17),
     ];
-    const BROW_DEFS: &[(&str, i32)] = &[
+
+    let brow_defs: [(&str, i32); 4] = [
         ("困る", 13),
         ("怒り", 1),
         ("にこり", 12),
-        ("真面目", 0),
-        ("上", 0),
-        ("下", 0),
+        ("真面目", tables.sinken_brow_ptn),
     ];
+
+    let has_any = |names: &[&str]| names.iter().any(|&n| by_name.contains_key(n));
+    let max_morph = |fno: f32, names: &[&str]| -> f32 {
+        let mut m = 0.0f32;
+        for &n in names {
+            if let Some(kfs) = by_name.get(n) {
+                m = m.max(sample_vmd_morph_kfs(kfs, fno).clamp(0.0, 1.0));
+            }
+        }
+        m
+    };
+
+    let emit_blush = has_any(&["照れ", "赤面", "照れ２", "照れ2"]);
+    let emit_iris_small = has_any(&["瞳小", "瞳大"]);
+    let emit_brow_offset = has_any(&["上", "下"]);
+    let emit_mouth_wider = has_any(&["口横広げ"]);
 
     let mut mouth_ptn = Vec::with_capacity(frames);
     let mut mouth_open = Vec::with_capacity(frames);
+    let mut mouth_weight = Vec::with_capacity(frames);
+    let mut mouth_corner_up = Vec::with_capacity(frames);
+    let mut mouth_corner_down = Vec::with_capacity(frames);
+    let mut mouth_wider = Vec::with_capacity(if emit_mouth_wider { frames } else { 0 });
+
     let mut eye_ptn = Vec::with_capacity(frames);
     let mut eye_open = Vec::with_capacity(frames);
+    let mut eye_open_l = Vec::with_capacity(frames);
+    let mut eye_open_r = Vec::with_capacity(frames);
+    let mut eye_wink_l_happy = Vec::with_capacity(frames);
+    let mut eye_wink_r_happy = Vec::with_capacity(frames);
+    let mut eye_expr_weight = Vec::with_capacity(frames);
+    let mut eye_wide = Vec::with_capacity(frames);
+
     let mut brow_ptn = Vec::with_capacity(frames);
+    let mut brow_weight = Vec::with_capacity(frames);
+    let mut brow_offset_y = Vec::with_capacity(if emit_brow_offset { frames } else { 0 });
+
+    let mut blush_vals = Vec::with_capacity(if emit_blush { frames } else { 0 });
+    let mut iris_small_vals = Vec::with_capacity(if emit_iris_small { frames } else { 0 });
+
     let step_div = sub_steps.max(1) as f32;
 
     for f in 0..frames {
         let fno = (f as f32 / step_div - delay_frames).max(0.0);
 
-        // 1. Mouth: pick active morph with largest weight > 0.005 (smooth vowel opening)
+        // 1. Mouth: primary vowel/shape + additive corner smile/frown (`にやり`/`口角上げ` + `口角下げ`)
         let mut best_mouth: Option<(f32, i32, f32)> = None;
-        for &(mname, ptn, r0, r1) in MOUTH_DEFS {
+        for &(mname, ptn, r0, r1) in MOUTH_PRIMARY_DEFS {
             if let Some(kfs) = by_name.get(mname) {
                 let w = sample_vmd_morph_kfs(kfs, fno).clamp(0.0, 1.0);
-                if w > 0.005 && best_mouth.map_or(true, |(bw, _, _)| w > bw) {
+                if w > 0.001 && best_mouth.map_or(true, |(bw, _, _)| w > bw) {
                     let open = (r0 + (r1 - r0) * w).clamp(0.0, 1.0);
                     best_mouth = Some((w, ptn, open));
                 }
             }
         }
-        if let Some((_, ptn, open)) = best_mouth {
+        let w_nikkori = max_morph(fno, &["にっこり"]);
+        let w_niyari = max_morph(fno, &["にやり", "にやり２", "にやり2", "口角上げ"]);
+        let w_frown = max_morph(fno, &["口角下げ"]);
+
+        if let Some((w, ptn, open)) = best_mouth {
             mouth_ptn.push(ptn as f32);
             mouth_open.push(open);
+            // Closed-shape primary morphs (`∧`, `ω`) blend smoothly via `mouth_weight`; open vowels scale via `open`.
+            let mw = if open > 1e-4 { 1.0 } else { w };
+            mouth_weight.push(mw);
+            mouth_corner_up.push(w_niyari.max(w_nikkori));
+            mouth_corner_down.push(w_frown);
+        } else if w_nikkori > w_niyari && w_nikkori > 0.001 {
+            mouth_ptn.push(19.0);
+            mouth_open.push(0.0);
+            mouth_weight.push(w_nikkori);
+            mouth_corner_up.push(w_niyari);
+            mouth_corner_down.push(w_frown);
         } else {
             mouth_ptn.push(0.0);
             mouth_open.push(0.0);
+            mouth_weight.push(1.0);
+            mouth_corner_up.push(w_niyari);
+            mouth_corner_down.push(w_frown);
+        }
+        if emit_mouth_wider {
+            mouth_wider.push(max_morph(fno, &["口横広げ"]));
         }
 
-        // 2. Eye: evaluate blink (`まばたき`) continuously, and check expression eye morphs (`EYE_DEFS`)
-        let w_blink = by_name
-            .get("まばたき")
-            .map_or(0.0, |kfs| sample_vmd_morph_kfs(kfs, fno).clamp(0.0, 1.0));
-        let mut best_eye: Option<(f32, i32, f32)> = None;
-        for &(ename, ptn, r0, r1) in EYE_DEFS {
+        // 2. Eyes: independent L/R openness, normal (`wink*_op`) vs happy (`gyu*_op`) wink, `笑い` closing to `egao_cl`, `びっくり` widening
+        let w_blink = max_morph(fno, &["まばたき"]);
+        let w_wink_l_norm = max_morph(fno, &["ウィンク", "ｳｨﾝｸ"]);
+        let w_wink_r_norm = max_morph(fno, &["ウィンク右", "ｳｨﾝｸ右"]);
+        let w_wink_l_hap = max_morph(fno, &["ウィンク２", "ｳｨﾝｸ２", "ウィンク2", "ｳｨﾝｸ2"]);
+        let w_wink_r_hap = max_morph(fno, &["ｳｨﾝｸ２右", "ウィンク２右", "ｳｨﾝｸ2右", "ウィンク2右"]);
+        let w_smile1 = max_morph(fno, &["笑い"]);
+        let w_smile2 = max_morph(fno, &["笑い目"]);
+        let w_surprise = max_morph(fno, &["びっくり"]);
+
+        let close_l_norm = w_blink.max(w_wink_l_norm);
+        let close_l_hap = w_wink_l_hap.max(w_smile1).max(w_smile2);
+        let close_l = close_l_norm.max(close_l_hap).clamp(0.0, 1.0);
+        let happy_l = if close_l_hap <= 1e-5 {
+            0.0
+        } else if close_l_norm <= 1e-5 {
+            1.0
+        } else {
+            (close_l_hap / (close_l_hap + close_l_norm)).clamp(0.0, 1.0)
+        };
+
+        let close_r_norm = w_blink.max(w_wink_r_norm);
+        let close_r_hap = w_wink_r_hap.max(w_smile1).max(w_smile2);
+        let close_r = close_r_norm.max(close_r_hap).clamp(0.0, 1.0);
+        let happy_r = if close_r_hap <= 1e-5 {
+            0.0
+        } else if close_r_norm <= 1e-5 {
+            1.0
+        } else {
+            (close_r_hap / (close_r_hap + close_r_norm)).clamp(0.0, 1.0)
+        };
+
+        let open_l = (1.0 - close_l).clamp(0.0, 1.0);
+        let open_r = (1.0 - close_r).clamp(0.0, 1.0);
+
+        let mut best_sym_eye: Option<(f32, i32)> = None;
+        for &(ename, ptn) in &sym_eye_defs {
+            if ptn <= 0 {
+                continue;
+            }
             if let Some(kfs) = by_name.get(ename) {
                 let w = sample_vmd_morph_kfs(kfs, fno).clamp(0.0, 1.0);
-                if w > 0.05 && best_eye.map_or(true, |(bw, _, _)| w > bw) {
-                    let open = (r0 + (r1 - r0) * w).clamp(0.0, 1.0);
-                    best_eye = Some((w, ptn, open));
+                if w > 0.001 && best_sym_eye.map_or(true, |(bw, _)| w > bw) {
+                    best_sym_eye = Some((w, ptn));
                 }
             }
         }
-        if let Some((w_expr, ptn, open)) = best_eye {
-            if w_blink > w_expr {
-                eye_ptn.push(0.0);
-                eye_open.push((1.0 - w_blink).clamp(0.0, 1.0));
-            } else {
-                eye_ptn.push(ptn as f32);
-                eye_open.push(open);
+        // `笑い` (3) and `笑い目` (4) also provide open-half expression shaping at partial weights
+        for (w_sm, ptn_sm) in [(w_smile1, 3), (w_smile2, 4)] {
+            if w_sm > 0.001 && best_sym_eye.map_or(true, |(bw, _)| w_sm > bw) {
+                best_sym_eye = Some((w_sm, ptn_sm));
             }
-        } else {
-            eye_ptn.push(0.0);
-            eye_open.push((1.0 - w_blink).clamp(0.0, 1.0));
         }
 
-        // 3. Eyebrow: pick active morph with largest weight > 0.05
+        if let Some((w_expr, ptn)) = best_sym_eye {
+            eye_ptn.push(ptn as f32);
+            eye_expr_weight.push(w_expr);
+        } else {
+            eye_ptn.push(0.0);
+            eye_expr_weight.push(0.0);
+        }
+        eye_open.push(0.5 * (open_l + open_r));
+        eye_open_l.push(open_l);
+        eye_open_r.push(open_r);
+        eye_wink_l_happy.push(happy_l);
+        eye_wink_r_happy.push(happy_r);
+        eye_wide.push(w_surprise);
+
+        // 3. Eyebrow: smooth weight interpolation (`face.brow_weight`) + optional vertical bone offset (`上`/`下`)
         let mut best_brow: Option<(f32, i32)> = None;
-        for &(bname, ptn) in BROW_DEFS {
+        for &(bname, ptn) in &brow_defs {
+            if ptn <= 0 {
+                continue;
+            }
             if let Some(kfs) = by_name.get(bname) {
                 let w = sample_vmd_morph_kfs(kfs, fno).clamp(0.0, 1.0);
-                if w > 0.05 && best_brow.map_or(true, |(bw, _)| w > bw) {
+                if w > 0.001 && best_brow.map_or(true, |(bw, _)| w > bw) {
                     best_brow = Some((w, ptn));
                 }
             }
         }
-        brow_ptn.push(best_brow.map_or(0.0, |(_, ptn)| ptn as f32));
+        if let Some((w_b, ptn)) = best_brow {
+            brow_ptn.push(ptn as f32);
+            brow_weight.push(w_b);
+        } else {
+            brow_ptn.push(0.0);
+            brow_weight.push(0.0);
+        }
+        if emit_brow_offset {
+            let w_up = max_morph(fno, &["上"]);
+            let w_down = max_morph(fno, &["下"]);
+            // chara_default_KKS.json: eyebrow_base translation [0, ±0.060, 0] * axisScale (0.083)
+            brow_offset_y.push((w_up - w_down) * (0.06 * 0.083));
+        }
+
+        // 4. Cheek blush (`照れ` / `赤面`) & iris shrink (`瞳小` / `瞳大`)
+        if emit_blush {
+            blush_vals.push(max_morph(fno, &["照れ", "赤面", "照れ２", "照れ2"]));
+        }
+        if emit_iris_small {
+            let w_small = max_morph(fno, &["瞳小"]);
+            let w_large = max_morph(fno, &["瞳大"]);
+            iris_small_vals.push((w_small - w_large).clamp(-1.0, 1.0));
+        }
     }
 
-    vec![
+    let mut out = vec![
         crate::okanim::Curve {
             name: "face.mouth_pattern".into(),
             values: mouth_ptn,
@@ -2330,6 +3531,18 @@ fn evaluate_vmd_morph_curves(
         crate::okanim::Curve {
             name: "face.mouth_open".into(),
             values: mouth_open,
+        },
+        crate::okanim::Curve {
+            name: "face.mouth_weight".into(),
+            values: mouth_weight,
+        },
+        crate::okanim::Curve {
+            name: "face.mouth_corner_up".into(),
+            values: mouth_corner_up,
+        },
+        crate::okanim::Curve {
+            name: "face.mouth_corner_down".into(),
+            values: mouth_corner_down,
         },
         crate::okanim::Curve {
             name: "face.eye_pattern".into(),
@@ -2340,10 +3553,63 @@ fn evaluate_vmd_morph_curves(
             values: eye_open,
         },
         crate::okanim::Curve {
+            name: "face.eye_open_l".into(),
+            values: eye_open_l,
+        },
+        crate::okanim::Curve {
+            name: "face.eye_open_r".into(),
+            values: eye_open_r,
+        },
+        crate::okanim::Curve {
+            name: "face.eye_wink_l_happy".into(),
+            values: eye_wink_l_happy,
+        },
+        crate::okanim::Curve {
+            name: "face.eye_wink_r_happy".into(),
+            values: eye_wink_r_happy,
+        },
+        crate::okanim::Curve {
+            name: "face.eye_expr_weight".into(),
+            values: eye_expr_weight,
+        },
+        crate::okanim::Curve {
+            name: "face.eye_wide".into(),
+            values: eye_wide,
+        },
+        crate::okanim::Curve {
             name: "face.brow_pattern".into(),
             values: brow_ptn,
         },
-    ]
+        crate::okanim::Curve {
+            name: "face.brow_weight".into(),
+            values: brow_weight,
+        },
+    ];
+    if emit_brow_offset {
+        out.push(crate::okanim::Curve {
+            name: "face.brow_offset_y".into(),
+            values: brow_offset_y,
+        });
+    }
+    if emit_mouth_wider {
+        out.push(crate::okanim::Curve {
+            name: "face.mouth_wider".into(),
+            values: mouth_wider,
+        });
+    }
+    if emit_blush {
+        out.push(crate::okanim::Curve {
+            name: "face.blush".into(),
+            values: blush_vals,
+        });
+    }
+    if emit_iris_small {
+        out.push(crate::okanim::Curve {
+            name: "face.iris_small".into(),
+            values: iris_small_vals,
+        });
+    }
+    out
 }
 
 fn sample_vmd_bone_kfs(
@@ -2892,6 +4158,55 @@ fn collect_character_keys(objects: &[Object], out: &mut Vec<i32>) {
     }
 }
 
+fn collect_character_rigs(
+    scene_bytes: &[u8],
+    objects: &[Object],
+    search_roots: &[&Path],
+    out: &mut HashMap<i32, MmddCharacterRig>,
+) {
+    for o in objects {
+        match o {
+            Object::Character {
+                key,
+                change,
+                nipple,
+                children,
+                ..
+            } => {
+                if let Ok(card) = crate::studio_scene::card_bytes(scene_bytes, o) {
+                    if let Ok(info0) = crate::card::parse_card_bytes(&card, 0) {
+                        let eff_outfit = info0.status_coordinate.max(0);
+                        let info = if eff_outfit > 0 {
+                            crate::card::parse_card_bytes(&card, eff_outfit)
+                                .unwrap_or(info0)
+                        } else {
+                            info0
+                        };
+                        if let Some(rig) = MmddCharacterRig::from_card_info_with_roots(
+                            &info,
+                            eff_outfit,
+                            Some(*nipple),
+                            change.scale[1],
+                            search_roots,
+                        ) {
+                            out.insert(*key, rig);
+                        }
+                    }
+                }
+                for (_, c) in children {
+                    collect_character_rigs(scene_bytes, c, search_roots, out);
+                }
+            }
+            Object::Item { children, .. }
+            | Object::Folder { children, .. }
+            | Object::Route { children, .. } => {
+                collect_character_rigs(scene_bytes, children, search_roots, out)
+            }
+            _ => {}
+        }
+    }
+}
+
 pub fn extract_mmdd(
     bytes: &[u8],
     scene: &Scene,
@@ -2945,6 +4260,15 @@ pub fn extract_mmdd(
 
     let mut char_keys = Vec::new();
     collect_character_keys(&scene.objects, &mut char_keys);
+    let mut scene_roots: Vec<&Path> = Vec::new();
+    if let Some(sp) = scene_path {
+        if let Some(parent) = sp.parent() {
+            scene_roots.push(parent);
+        }
+    }
+    scene_roots.push(out_dir);
+    let mut char_rigs = HashMap::new();
+    collect_character_rigs(bytes, &scene.objects, &scene_roots, &mut char_rigs);
 
     let resolve_actor_key = |alias: &str| -> i32 {
         if let Some(v) = vnge {
@@ -3164,11 +4488,21 @@ pub fn extract_mmdd(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            let rig = char_rigs.get(&char_key);
+            let auto_char_scale = smap
+                .get("autoCharScale")
+                .map(|v| val_to_bool(v, false))
+                .unwrap_or(false);
+            let saved_char_scale = smap
+                .get("charScale")
+                .map(|v| val_to_f32(v, 0.0))
+                .unwrap_or(0.0);
             let mut params = MotionSolveParams {
-                char_scale: smap
-                    .get("charScale")
-                    .map(|v| val_to_f32(v, 1.0))
-                    .unwrap_or(1.0),
+                char_scale: if auto_char_scale && rig.is_some() {
+                    0.0
+                } else {
+                    saved_char_scale
+                },
                 playback_speed: smap
                     .get("playbackSpeed")
                     .map(|v| val_to_f32(v, 1.0))
@@ -3181,16 +4515,41 @@ pub fn extract_mmdd(
                 looping: out.loop_play,
                 ..Default::default()
             };
-            if let Some(hh_val) = smap
-                .get("highHeels")
-                .or_else(|| smap.get("heelzRot"))
+            if let Some(eh_val) = smap
+                .get("enableHighHeelz")
                 .or_else(|| smap.get("enableHeels"))
+            {
+                params.enable_high_heelz = Some(val_to_bool(eh_val, false));
+            }
+            if let Some(hh_val) = smap
+                .get("heelzRotation")
+                .or_else(|| smap.get("highHeels"))
+                .or_else(|| smap.get("heelzRot"))
             {
                 if let Some(v3) = val_to_v3(hh_val) {
                     params.high_heels_rot = Some(v3);
-                } else if val_to_bool(hh_val, false) {
-                    params.high_heels_rot = Some([-35.0, 0.0, 25.0]);
+                } else if hh_val.is_boolean() {
+                    if val_to_bool(hh_val, false) {
+                        params.high_heels_rot = Some(DEFAULT_HIGH_HEEL_ROT);
+                        if params.enable_high_heelz.is_none() {
+                            params.enable_high_heelz = Some(true);
+                        }
+                    } else if params.enable_high_heelz.is_none() {
+                        params.enable_high_heelz = Some(false);
+                    }
                 }
+            }
+            params.shoes_detect = smap
+                .get("shoesDetect")
+                .map(|v| val_to_bool(v, true))
+                .unwrap_or_else(|| params.enable_high_heelz != Some(false));
+            if let Some(so_val) = smap.get("shoesOffset") {
+                let parsed_so = if let Some(s) = so_val.as_str() {
+                    parse_py_or_json(s).ok().and_then(|v| parse_shoes_offset_val(&v))
+                } else {
+                    parse_shoes_offset_val(so_val)
+                };
+                params.shoes_offset = parsed_so;
             }
             if let Some(ik_val) = smap.get("ikEnable") {
                 let ik_obj = if let Some(s) = ik_val.as_str() {
@@ -3228,11 +4587,10 @@ pub fn extract_mmdd(
                             .custom_rot_scale
                             .insert(bname.to_string(), val_to_f32(v, 1.0));
                     }
-                    if let Some(v) = ao
-                        .get("posadj")
-                        .or_else(|| ao.get("posoffset"))
-                        .and_then(val_to_v3)
-                    {
+                    if let Some(v) = ao.get("posadj").and_then(val_to_v3) {
+                        params.custom_base_pos.insert(bname.to_string(), v);
+                    }
+                    if let Some(v) = ao.get("posoffset").and_then(val_to_v3) {
                         params.custom_pos_offset.insert(bname.to_string(), v);
                     }
                     if let Some(v) = ao.get("posscale") {
@@ -3325,7 +4683,7 @@ pub fn extract_mmdd(
                         .and_then(|p| p.file_stem())
                         .and_then(|s| s.to_str())
                         .unwrap_or("mmdd");
-                    if let Ok(anim) = solve_vmd_to_okanim(&parsed_vmd, &ini, &params, stem) {
+                    if let Ok(anim) = solve_vmd_to_okanim_for_rig(&parsed_vmd, &ini, &params, stem, rig) {
                         frames = ((anim.frames.saturating_sub(1)) / 2 + 1).max(1);
                         duration = anim.duration();
                         if let Ok(anim_bytes) = anim.to_bytes() {
@@ -3338,6 +4696,11 @@ pub fn extract_mmdd(
                 }
             }
 
+            let effective_scale = if params.char_scale > 0.0 {
+                params.char_scale
+            } else {
+                rig.map_or(1.0, MmddCharacterRig::auto_char_scale)
+            };
             out.motions.push(MmddMotionTrack {
                 char_key,
                 alias,
@@ -3350,7 +4713,7 @@ pub fn extract_mmdd(
                 okanim: okanim_path,
                 delay: params.delay,
                 playback_speed: params.playback_speed,
-                char_scale: params.char_scale,
+                char_scale: effective_scale,
                 frames,
                 duration,
                 looping: params.looping,
@@ -3706,8 +5069,10 @@ pub fn extract_mmdd(
                 .map(|v| val_to_bool(v, false))
                 .unwrap_or(false);
 
+            let rig = char_rigs.get(&char_key);
+            let auto_scale = rig.map_or(1.0, MmddCharacterRig::auto_char_scale);
             let mut params = MotionSolveParams {
-                char_scale: scale_model / 0.76,
+                char_scale: (scale_model / 0.76) * auto_scale,
                 playback_speed: speed,
                 delay: 0.0,
                 interpolate_consecutive: true,
@@ -3750,7 +5115,7 @@ pub fn extract_mmdd(
                             .file_stem()
                             .and_then(|s| s.to_str())
                             .unwrap_or("kkvmd");
-                        if let Ok(anim) = solve_vmd_to_okanim(&parsed_vmd, &ini, &params, stem) {
+                        if let Ok(anim) = solve_vmd_to_okanim_for_rig(&parsed_vmd, &ini, &params, stem, rig) {
                             frames = ((anim.frames.saturating_sub(1)) / 2 + 1).max(1);
                             duration = anim.duration();
                             if let Ok(anim_bytes) = anim.to_bytes() {
@@ -3815,7 +5180,7 @@ mod tests {
     #[test]
     fn default_chara_ini_parses_completely() {
         let ini = CharaIniConfig::parse(DEFAULT_CHARA_INI).expect("parse default chara ini");
-        assert_eq!(ini.bone_names.len(), 88);
+        assert_eq!(ini.bone_names.len(), 90);
         assert_eq!(ini.ik_sets.len(), 2);
         assert_eq!(ini.ik_sets[0].name, "FOOT IK");
         assert_eq!(ini.ik_sets[1].name, "TOE IK");
@@ -3885,5 +5250,1504 @@ mod tests {
             let anim = OkAnim::from_bytes(&std::fs::read(okanim_path).unwrap()).unwrap();
             assert!(anim.frames > 100);
         }
+    }
+
+    fn make_shaped_test_session(
+        shape_body: Vec<f32>,
+        shape_face: Vec<f32>,
+        abm: Vec<crate::abmx::AbmBone>,
+    ) -> Option<crate::session::OkSession> {
+        let tpl = mmdd_shape_template()?;
+        let body_rest = Some(tpl.female_body_rest.clone());
+        let head_rest = tpl.head_rest.clone();
+        let mut sess = crate::session::OkSession {
+            accessory_context: None,
+            editor_pregnancy: Default::default(),
+            pv_config: None,
+            pv_mask: 15,
+            pv_fk: false,
+            eye_look_config: None,
+            eye_look_runtime: None,
+            head_look: crate::head_look::HeadLook::default(),
+            physx_secondary: false,
+            external_animation: None,
+            scene_gpu_parts: Vec::new(),
+            physics: Default::default(),
+            body_interaction: None,
+            game_root: PathBuf::new(),
+            ramp_png: None,
+            shadow_depth: 0.26,
+            line_width: 1.0,
+            line_depth: 1.0,
+            kano_ver_shift: 0.0,
+            body_rest: body_rest.clone(),
+            body_dynamics: Default::default(),
+            body_dynamic_runtime: None,
+            yure_policy: None,
+            body_colliders: Default::default(),
+            clothes_dynamics: Default::default(),
+            clothes_dynamic_runtime: None,
+            bust_softness: 0.5,
+            bust_weight: 0.5,
+            collider_settings: Default::default(),
+            collider_overrides: Default::default(),
+            head_rest: head_rest.clone(),
+            body_skel: body_rest,
+            head_skel: head_rest.clone(),
+            body_keys: tpl.body_keys.clone(),
+            head_keys: tpl.head_keys.clone(),
+            hand_shapes: Default::default(),
+            user_fk: Vec::new(),
+            user_fk_ids: Default::default(),
+            hand_shape_ids: Default::default(),
+            studio_ik_solver: None,
+            studio_ik: Vec::new(),
+            studio_ik_rotations: Vec::new(),
+            studio_ik_weights: Vec::new(),
+            correct: tpl.correct.clone(),
+            sex: 1,
+            type_bone: 0,
+            nip_stand_rate: 0.5,
+            shape_body: shape_body.clone(),
+            shape_face: shape_face.clone(),
+            abm,
+            parts: Vec::new(),
+            coordinate_count: 1,
+            skel_export: None,
+            anim_time: 0.0,
+            paired_ik_runtime: None,
+            anim_clip: String::new(),
+            anim_scene_mode: 4,
+            mmdd_world_lock: false,
+            mmdd_face_bone_dirty: false,
+            active_shoe_meta: None,
+            face_runtime: Default::default(),
+            anim_parameters: HashMap::new(),
+            anim_clock: Default::default(),
+            anim_crossfade: None,
+            anim_layer_crossfades: Default::default(),
+            body_shaped: None,
+            shape_reference_scratch: None,
+            head_shaped: None,
+            head_full_rest: head_rest.clone(),
+            head_full_posed: head_rest,
+        };
+        sess.apply_shape(&shape_body, &shape_face);
+        Some(sess)
+    }
+
+    fn evaluate_reference_dummy_tree(
+        vmd: &VmdFile,
+        ini: &CharaIniConfig,
+        params: &MotionSolveParams,
+        rig: &MmddCharacterRig,
+        frame_no: f32,
+    ) -> DummyTree {
+        let mut prep_body = rig.live_rest.clone();
+        if ini.prepare_enable_set {
+            let mut updates = Vec::new();
+            for bname in &ini.bone_names {
+                let Some(wname) = ini.bones.get(bname).and_then(|b| b.weight_bone.as_ref()) else {
+                    continue;
+                };
+                let wkey = wname.to_ascii_lowercase();
+                let rot = if let Some(&r) = ini.prepare_rotations.get(&wkey) {
+                    r
+                } else if !ini.prepare_listed_only {
+                    [0.0, 0.0, 0.0, 1.0]
+                } else {
+                    continue;
+                };
+                if let Some((id, _)) = find_skel_bone_ci(&prep_body, wname) {
+                    updates.push((id, rot));
+                }
+            }
+            for (id, rot) in updates {
+                if let Some(tf) = prep_body.tfs.get_mut(&id) {
+                    tf.rot = rot;
+                }
+            }
+            prep_body.rebuild_worlds();
+        }
+        let mut tree = DummyTree::new(ini);
+        let mut bone_adjusts = ini.bone_adjusts.clone();
+        for (idx, bname) in ini.bone_names.iter().enumerate() {
+            let bdef = &ini.bones[bname];
+            match &bdef.pos_spec {
+                BonePosSpec::Bone(target) => {
+                    let (wpos, _) = skel_world_pos_rot(&prep_body, target);
+                    tree.set_world_pos(idx, wpos);
+                }
+                BonePosSpec::Between(t1, t2, scale) => {
+                    let (p1, _) = skel_world_pos_rot(&prep_body, t1);
+                    let (p2, _) = skel_world_pos_rot(&prep_body, t2);
+                    tree.set_world_pos(
+                        idx,
+                        [
+                            p1[0] + (p2[0] - p1[0]) * scale,
+                            p1[1] + (p2[1] - p1[1]) * scale,
+                            p1[2] + (p2[2] - p1[2]) * scale,
+                        ],
+                    );
+                }
+                BonePosSpec::Offset(target, offset) => {
+                    let (p, _) = skel_world_pos_rot(&prep_body, target);
+                    tree.set_world_pos(idx, vadd(p, *offset));
+                }
+                BonePosSpec::Reset(target, rst) => {
+                    let (mut p, _) = skel_world_pos_rot(&prep_body, target);
+                    for axis in 0..3 {
+                        if let Some(v) = rst[axis] {
+                            p[axis] = v;
+                        }
+                    }
+                    tree.set_world_pos(idx, p);
+                }
+                BonePosSpec::BonePosRot(target) => {
+                    let (wpos, wrot) = skel_world_pos_rot(&prep_body, target);
+                    tree.set_world_pos(idx, wpos);
+                    tree.set_world_rot(idx, wrot);
+                }
+            }
+            if let Some(adj) = bone_adjusts.get_mut(bname) {
+                adj.base_position = tree.nodes[idx].local_pos;
+            }
+        }
+        let mut ik_solvers: HashMap<usize, IkSolver> = HashMap::new();
+        for ik_set in &ini.ik_sets {
+            for ik_bname in &ik_set.ik_bones {
+                let Some(&ik_idx) = tree.by_name.get(ik_bname) else { continue };
+                let bdef = &ini.bones[ik_bname];
+                let Some(&tgt_idx) = tree.by_name.get(&bdef.ik_data[0]) else { continue };
+                if ik_set.solver.eq_ignore_ascii_case("MMDIKSolverLeg") && bdef.ik_data.len() >= 3 {
+                    let (c0, c1) = (tree.by_name[&bdef.ik_data[1]], tree.by_name[&bdef.ik_data[2]]);
+                    ik_solvers.insert(
+                        ik_idx,
+                        IkSolver::create_leg(
+                            &mut tree,
+                            ik_idx,
+                            tgt_idx,
+                            c0,
+                            c1,
+                            ik_set.iterations,
+                            ik_set.step_angle,
+                            ik_set.min_knee_rot,
+                        ),
+                    );
+                } else {
+                    let chain: Vec<usize> = bdef.ik_data[1..]
+                        .iter()
+                        .filter_map(|n| tree.by_name.get(n).copied())
+                        .collect();
+                    ik_solvers.insert(
+                        ik_idx,
+                        IkSolver::NoLimit {
+                            ik_bone: ik_idx,
+                            ik_tgt: tgt_idx,
+                            chain,
+                            iterations: ik_set.iterations,
+                            step_angle: ik_set.step_angle,
+                        },
+                    );
+                }
+            }
+        }
+        for bname in &ini.bone_names {
+            if bone_adjusts.get(bname).map_or(false, |a| a.rot_axis_auto) {
+                if let Some(pname) = ini.bones.get(bname).and_then(|b| b.parent.as_ref()) {
+                    if let Some(p_adj) = bone_adjusts.get(pname) {
+                        let auto_adj = quat_mul(qinv(p_adj.rot_adjustment), p_adj.rot_axis_adjustment);
+                        let euler = quat_to_unity_euler(auto_adj);
+                        if let Some(adj) = bone_adjusts.get_mut(bname) {
+                            adj.set_axis_adjustment(euler);
+                        }
+                    }
+                }
+            }
+        }
+        let eff = if params.char_scale > 0.0 {
+            params.char_scale
+        } else {
+            rig.auto_char_scale()
+        };
+        for adj in bone_adjusts.values_mut() {
+            adj.set_pos_global_scale(ini.axis_scale * eff);
+        }
+        let mut bone_kfs: HashMap<usize, Vec<VmdBoneKeyFrame>> = HashMap::new();
+        for (idx, _) in ini.bone_names.iter().enumerate() {
+            bone_kfs.insert(idx, vec![VmdBoneKeyFrame::default()]);
+        }
+        let mut seen: HashMap<usize, std::collections::HashSet<u32>> = HashMap::new();
+        for kf in &vmd.bone_keyframes {
+            let Some(bname) = ini.vmd_to_bone.get(&kf.name) else { continue };
+            let Some(&idx) = tree.by_name.get(bname) else { continue };
+            let set = seen.entry(idx).or_default();
+            if set.is_empty() {
+                bone_kfs.insert(idx, Vec::new());
+            }
+            if set.insert(kf.frame_no) {
+                bone_kfs.get_mut(&idx).unwrap().push(kf.clone());
+            }
+        }
+        for kfs in bone_kfs.values_mut() {
+            kfs.sort_by_key(|k| k.frame_no);
+        }
+        for (idx, bname) in ini.bone_names.iter().enumerate() {
+            let bdef = &ini.bones[bname];
+            let adj = &bone_adjusts[bname];
+            let (raw_pos, raw_rot) = sample_vmd_bone_kfs(&bone_kfs[&idx], frame_no, true);
+            if bdef.is_rotation || (bdef.is_track && bdef.track_ptn.contains('r')) {
+                let mut brot = adj.get_adjusted_rotation(raw_rot);
+                if bdef.is_limit_axis {
+                    let (mut angle, axis) = quat_to_angle_axis_deg(brot);
+                    if vlen(vadd(axis, bdef.limit_ref_axis)) < 1.0 {
+                        angle = -angle;
+                    }
+                    brot = quat_from_angle_axis_deg(angle, bdef.limit_axis);
+                }
+                tree.set_local_rot(idx, brot);
+            }
+            if bdef.is_position || (bdef.is_track && bdef.track_ptn.contains('p')) {
+                tree.set_local_pos(idx, adj.get_adjusted_position(raw_pos));
+            }
+            if bdef.is_ik {
+                if let Some(solver) = ik_solvers.get(&idx) {
+                    solver.solve(&mut tree);
+                }
+            }
+            if bdef.is_track {
+                if let Some(&src_idx) = tree.by_name.get(&bdef.track_src) {
+                    if bdef.track_ptn.contains('r') {
+                        let scaled = quat_slerp_unclamped(
+                            [0.0, 0.0, 0.0, 1.0],
+                            tree.nodes[src_idx].local_rot,
+                            bdef.track_scale,
+                        );
+                        tree.set_local_rot(idx, quat_mul(scaled, tree.nodes[idx].local_rot));
+                    }
+                    if bdef.track_ptn.contains('p') {
+                        tree.set_local_pos(
+                            idx,
+                            vadd(
+                                tree.nodes[idx].local_pos,
+                                vscale(tree.nodes[src_idx].local_pos, bdef.track_scale),
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+        for td in &ini.twist_disperse {
+            if !td.enable {
+                continue;
+            }
+            let (Some(&t_idx), Some(&d_idx)) = (
+                tree.by_name.get(&td.twist_bone),
+                tree.by_name.get(&td.disperse_bone),
+            ) else {
+                continue;
+            };
+            let org_q = tree.nodes[t_idx].local_rot;
+            if org_q != [0.0, 0.0, 0.0, 1.0] {
+                let remain_q = quat_lerp([0.0, 0.0, 0.0, 1.0], org_q, 1.0 - td.disperse_rate);
+                let disperse_q = quat_mul(org_q, qinv(remain_q));
+                tree.set_local_rot(t_idx, remain_q);
+                tree.set_local_rot(d_idx, quat_mul(tree.nodes[d_idx].local_rot, disperse_q));
+            }
+        }
+        tree
+    }
+
+    fn quat_angle_err_rad(a: Quat, b: Quat) -> f32 {
+        let dot = qdot(qnorm(a), qnorm(b)).abs().clamp(0.0, 1.0);
+        2.0 * dot.acos()
+    }
+
+    #[test]
+    fn shaped_rig_vmd_solve_hits_ik_foot_targets_without_double_scaling() {
+        let Some(_) = mmdd_shape_template() else {
+            eprintln!("skipping: shared base_v1 globals not present");
+            return;
+        };
+        let ini = CharaIniConfig::parse(DEFAULT_CHARA_INI).expect("parse ini");
+        let make_kf = |name: &str, frame_no: u32, pos: V3, rot: Quat| VmdBoneKeyFrame {
+            name: name.to_string(),
+            frame_no,
+            pos,
+            rot,
+            ..Default::default()
+        };
+        let vmd = VmdFile {
+            model_name: "TestModel".into(),
+            bone_keyframes: vec![
+                make_kf("センター", 0, [0.0; 3], [0.0, 0.0, 0.0, 1.0]),
+                make_kf("センター", 5, [0.6, -2.4, 0.5], [0.0, 0.0, 0.0, 1.0]),
+                make_kf("左足ＩＫ", 0, [0.0; 3], [0.0, 0.0, 0.0, 1.0]),
+                make_kf("左足ＩＫ", 5, [0.4, 0.0, -0.35], [0.0, 0.0, 0.0, 1.0]),
+                make_kf("右足ＩＫ", 0, [0.0; 3], [0.0, 0.0, 0.0, 1.0]),
+                make_kf("右足ＩＫ", 5, [-0.4, 0.0, 0.35], [0.0, 0.0, 0.0, 1.0]),
+                make_kf("両目", 5, [0.0; 3], euler_deg_to_quat([6.0, -9.0, 0.0])),
+            ],
+            morph_keyframes: Vec::new(),
+            camera_keyframes: Vec::new(),
+            ik_keyframes: Vec::new(),
+        };
+
+        // Case A: Short character (height = 0.0, custom leg sliders)
+        let mut short_body = vec![0.5f32; 44];
+        short_body[0] = 0.0;
+        for s in &mut short_body[29..34] {
+            *s = 0.15;
+        }
+        let mut short_sess =
+            make_shaped_test_session(short_body, vec![0.5; 52], Vec::new()).unwrap();
+        let short_rig = MmddCharacterRig::from_session(&short_sess, 1.0).unwrap();
+        assert!(short_rig.height_scale < 0.92, "expected short height_scale, got {}", short_rig.height_scale);
+
+        // Case B: Tall character (height = 1.0, custom leg sliders + ABMX on cf_n_height & cf_j_hips)
+        let mut tall_body = vec![0.5f32; 44];
+        tall_body[0] = 1.0;
+        for s in &mut tall_body[29..34] {
+            *s = 0.85;
+        }
+        let tall_abm = vec![
+            crate::abmx::AbmBone {
+                name: "cf_n_height".into(),
+                location: 0,
+                coord: vec![crate::abmx::AbmData {
+                    scale: [1.0, 1.12, 1.0],
+                    length: 1.0,
+                    pos: [0.0; 3],
+                    rot: [0.0; 3],
+                }],
+            },
+            crate::abmx::AbmBone {
+                name: "cf_j_hips".into(),
+                location: 0,
+                coord: vec![crate::abmx::AbmData {
+                    scale: [1.0; 3],
+                    length: 1.08,
+                    pos: [0.0, 0.015, -0.005],
+                    rot: [0.0; 3],
+                }],
+            },
+            crate::abmx::AbmBone {
+                name: "cf_j_leg01_L".into(),
+                location: 0,
+                coord: vec![crate::abmx::AbmData {
+                    scale: [1.0; 3],
+                    length: 1.15,
+                    pos: [0.0; 3],
+                    rot: [0.0; 3],
+                }],
+            },
+        ];
+        let mut tall_sess = make_shaped_test_session(tall_body, vec![0.5; 52], tall_abm).unwrap();
+        let tall_rig = MmddCharacterRig::from_session(&tall_sess, 1.0).unwrap();
+        // KKS height=1.0 gives cf_n_height.scale.y == 1.0 (vs ~0.95 at 0.5, ~0.88 at 0.0), times ABMX 1.12 == 1.12
+        assert!(
+            (tall_rig.height_scale - 1.12).abs() < 1e-3,
+            "expected tall(1.0)*ABMX(1.12) height_scale ~= 1.12, got {}",
+            tall_rig.height_scale
+        );
+
+        // Verify obj_scale_y feeds auto_char_scale without mutating ChaControl-local rig rest
+        let scaled_obj_rig = MmddCharacterRig::from_session(&tall_sess, 1.25).unwrap();
+        assert!((scaled_obj_rig.auto_char_scale() - tall_rig.height_scale * 1.25).abs() < 1e-5);
+
+        let params = MotionSolveParams::default();
+        let mut unshaped_foot_err_on_tall = 0.0f32;
+
+        for (label, sess, rig) in [
+            ("short", &mut short_sess, &short_rig),
+            ("tall_abmx", &mut tall_sess, &tall_rig),
+        ] {
+            let ref_tree = evaluate_reference_dummy_tree(&vmd, &ini, &params, rig, 5.0);
+            // Ground-truth KKS `vmdlib.py` `DoBoneSync` (`DefWeightSyncMode=global`) on `rig.live_rest`
+            let mut kks_body = rig.live_rest.clone();
+            let kks_tracks = family_tracks(&kks_body);
+            for &(id, ref track) in &kks_tracks {
+                let Some(bname) = ini.bones.iter().find_map(|(dn, bd)| {
+                    bd.weight_bone
+                        .as_ref()
+                        .filter(|wb| wb.eq_ignore_ascii_case(&track.bone))
+                        .map(|_| dn.as_str())
+                }) else {
+                    continue;
+                };
+                if bname == "root" {
+                    continue;
+                }
+                let bdef = &ini.bones[bname];
+                let d_idx = ref_tree.by_name[bname];
+                let sync_pos = bdef.is_position || (bdef.is_track && bdef.track_ptn.contains('p'));
+                let sync_rot = bdef.is_rotation || (bdef.is_track && bdef.track_ptn.contains('r'));
+                if bdef.weight_sync_local {
+                    if let Some(tf) = kks_body.tfs.get_mut(&id) {
+                        if sync_pos {
+                            tf.pos = ref_tree.nodes[d_idx].local_pos;
+                        }
+                        if sync_rot {
+                            tf.rot = ref_tree.nodes[d_idx].local_rot;
+                        }
+                    }
+                } else {
+                    let parent = kks_body.tfs.get(&id).and_then(|t| t.parent);
+                    let p_rot = parent
+                        .map(|pid| crate::pose::world_rotation_of(pid, &kks_body.tfs))
+                        .unwrap_or([0.0, 0.0, 0.0, 1.0]);
+                    let local_pos = if sync_pos {
+                        parent
+                            .and_then(|pid| {
+                                crate::pose::mat_inverse_checked(&crate::pose::world_of_id(
+                                    pid,
+                                    &kks_body.tfs,
+                                ))
+                            })
+                            .map(|inv| crate::pose::mat_vec(&inv, ref_tree.nodes[d_idx].world_pos))
+                    } else {
+                        None
+                    };
+                    if let Some(tf) = kks_body.tfs.get_mut(&id) {
+                        if let Some(lp) = local_pos {
+                            tf.pos = lp;
+                        }
+                        if sync_rot {
+                            tf.rot = qnorm(quat_mul(qinv(p_rot), ref_tree.nodes[d_idx].world_rot));
+                        }
+                    }
+                }
+            }
+            kks_body.rebuild_worlds();
+            let exp_hips = ref_tree.nodes[ref_tree.by_name["hips"]].world_pos;
+            let (exp_foot_l, exp_foot_l_rot) = skel_world_pos_rot(&kks_body, "cf_j_leg03_L");
+            let (exp_foot_r, exp_foot_r_rot) = skel_world_pos_rot(&kks_body, "cf_j_leg03_R");
+
+            let anim = solve_vmd_to_okanim_for_rig(&vmd, &ini, &params, label, Some(rig))
+                .expect("solve shaped rig");
+            assert!(
+                anim.curves.iter().any(|c| c.name == "face.eye_gaze_lh"),
+                "{label}: grafted head should emit eye gaze curves"
+            );
+            let anim_bytes = anim.to_bytes().unwrap();
+            let mut player =
+                crate::okanim::Player::new(r#"{"type":"anim","anim":0}"#, &[&anim_bytes]).unwrap();
+            crate::okanim::solve::apply(&mut player, &mut [sess], 5.0 / 30.0, 0.0).unwrap();
+
+            let body = sess.body_skel.as_ref().unwrap();
+            let (got_hips, _) = skel_world_pos_rot(body, "cf_j_hips");
+            let (got_foot_l, got_foot_l_rot) = skel_world_pos_rot(body, "cf_j_leg03_L");
+            let (got_foot_r, got_foot_r_rot) = skel_world_pos_rot(body, "cf_j_leg03_R");
+
+            let hips_err = vlen(vsub(got_hips, exp_hips));
+            let foot_l_err = vlen(vsub(got_foot_l, exp_foot_l));
+            let foot_r_err = vlen(vsub(got_foot_r, exp_foot_r));
+            assert!(
+                hips_err < 1e-4,
+                "{label}: hips world pos mismatch (double-scaling check): got={got_hips:?} exp={exp_hips:?} err={hips_err}"
+            );
+            assert!(
+                foot_l_err < 1e-4 && foot_r_err < 1e-4,
+                "{label}: foot KKS DoBoneSync pos mismatch: L err={foot_l_err}, R err={foot_r_err}"
+            );
+            assert!(
+                quat_angle_err_rad(got_foot_l_rot, exp_foot_l_rot) < 5e-4
+                    && quat_angle_err_rad(got_foot_r_rot, exp_foot_r_rot) < 5e-4,
+                "{label}: foot KKS DoBoneSync rot mismatch"
+            );
+
+            if label == "tall_abmx" {
+                let unshaped = solve_vmd_to_okanim(&vmd, &ini, &params, "unshaped")
+                    .expect("solve unshaped");
+                let unshaped_bytes = unshaped.to_bytes().unwrap();
+                let mut u_player =
+                    crate::okanim::Player::new(r#"{"type":"anim","anim":0}"#, &[&unshaped_bytes])
+                        .unwrap();
+                crate::okanim::solve::apply(&mut u_player, &mut [sess], 5.0 / 30.0, 0.0).unwrap();
+                let u_body = sess.body_skel.as_ref().unwrap();
+                let (u_foot_l, _) = skel_world_pos_rot(u_body, "cf_j_leg03_L");
+                unshaped_foot_err_on_tall = vlen(vsub(u_foot_l, exp_foot_l));
+            }
+        }
+        assert!(
+            unshaped_foot_err_on_tall > 0.015,
+            "expected unshaped standard skeleton to have significant foot IK error on tall+ABMX rig, got {unshaped_foot_err_on_tall}"
+        );
+    }
+
+    #[test]
+    fn mmdd_world_lock_preserves_global_cf_j_rotations_across_expression_bone_and_abmx() {
+        let Some(_) = mmdd_shape_template() else {
+            eprintln!("skipping: shared base_v1 globals not present");
+            return;
+        };
+        let ini = CharaIniConfig::parse(DEFAULT_CHARA_INI).expect("parse ini");
+        let make_kf = |name: &str, frame_no: u32, pos: V3, euler_deg: V3| VmdBoneKeyFrame {
+            name: name.to_string(),
+            frame_no,
+            pos,
+            rot: euler_deg_to_quat(euler_deg),
+            ..Default::default()
+        };
+        let vmd = VmdFile {
+            model_name: "TestWorldLock".into(),
+            bone_keyframes: vec![
+                make_kf("センター", 3, [0.0, -1.8, 0.2], [4.0, -8.0, 2.0]),
+                make_kf("上半身", 3, [0.0; 3], [12.0, -15.0, 8.0]),
+                make_kf("上半身2", 3, [0.0; 3], [8.0, 10.0, -6.0]),
+                make_kf("首", 3, [0.0; 3], [-5.0, 18.0, 4.0]),
+                make_kf("頭", 3, [0.0; 3], [7.0, -10.0, 3.0]),
+                make_kf("左肩", 3, [0.0; 3], [0.0, 0.0, 12.0]),
+                make_kf("左腕", 3, [0.0; 3], [15.0, -20.0, 52.0]),
+                make_kf("左腕捩", 3, [0.0; 3], [32.0, 0.0, 0.0]),
+                make_kf("左ひじ", 3, [0.0; 3], [0.0, -48.0, 0.0]),
+                make_kf("左手捩", 3, [0.0; 3], [-28.0, 0.0, 0.0]),
+                make_kf("左手首", 3, [0.0; 3], [10.0, 15.0, -12.0]),
+                make_kf("右肩", 3, [0.0; 3], [0.0, 0.0, -10.0]),
+                make_kf("右腕", 3, [0.0; 3], [-10.0, 18.0, -46.0]),
+                make_kf("右ひじ", 3, [0.0; 3], [0.0, 42.0, 0.0]),
+                make_kf("左足ＩＫ", 3, [0.2, 0.4, -0.3], [0.0; 3]),
+                make_kf("右足ＩＫ", 3, [-0.2, 0.2, 0.25], [0.0; 3]),
+            ],
+            morph_keyframes: Vec::new(),
+            camera_keyframes: Vec::new(),
+            ik_keyframes: Vec::new(),
+        };
+
+        let abm = vec![
+            crate::abmx::AbmBone {
+                name: "cf_d_shoulder_L".into(),
+                location: 0,
+                coord: vec![crate::abmx::AbmData {
+                    scale: [1.0; 3],
+                    length: 1.0,
+                    pos: [0.0; 3],
+                    rot: [8.0, -12.0, 15.0],
+                }],
+            },
+            crate::abmx::AbmBone {
+                name: "cf_d_shoulder_R".into(),
+                location: 0,
+                coord: vec![crate::abmx::AbmData {
+                    scale: [1.0; 3],
+                    length: 1.0,
+                    pos: [0.0; 3],
+                    rot: [-6.0, 10.0, -14.0],
+                }],
+            },
+            crate::abmx::AbmBone {
+                name: "cf_j_arm00_L".into(),
+                location: 0,
+                coord: vec![crate::abmx::AbmData {
+                    scale: [1.0; 3],
+                    length: 1.0,
+                    pos: [0.0; 3],
+                    rot: [0.0, 11.0, -9.0],
+                }],
+            },
+        ];
+
+        let mut sess = make_shaped_test_session(vec![0.5; 44], vec![0.5; 52], abm).unwrap();
+        let rig = MmddCharacterRig::from_session(&sess, 1.0).unwrap();
+        let params = MotionSolveParams::default();
+        let ref_tree = evaluate_reference_dummy_tree(&vmd, &ini, &params, &rig, 3.0);
+
+        let mut anim = solve_vmd_to_okanim_for_rig(&vmd, &ini, &params, "lock_test", Some(&rig))
+            .expect("solve lock_test");
+        let anim_bytes = anim.to_bytes().unwrap();
+        let mut player =
+            crate::okanim::Player::new(r#"{"type":"anim","anim":0}"#, &[&anim_bytes]).unwrap();
+        crate::okanim::solve::apply(&mut player, &mut [&mut sess], 3.0 / 30.0, 0.0).unwrap();
+        assert!(sess.mmdd_world_lock, "mmdd_world_lock should be active for source=mmdd_vmd");
+
+        let body = sess.body_skel.as_ref().unwrap();
+        for (dummy_name, cf_j_name) in [
+            ("hips", "cf_j_hips"),
+            ("waist", "cf_j_waist01"),
+            ("spine1", "cf_j_spine01"),
+            ("spine2", "cf_j_spine02"),
+            ("spine3", "cf_j_spine03"),
+            ("neck", "cf_j_neck"),
+            ("head", "cf_j_head"),
+            ("shoulder_l", "cf_j_shoulder_L"),
+            ("uparm_l", "cf_j_arm00_L"),
+            ("lowarm_l", "cf_j_forearm01_L"),
+            ("hand_l", "cf_j_hand_L"),
+            ("shoulder_r", "cf_j_shoulder_R"),
+            ("uparm_r", "cf_j_arm00_R"),
+            ("lowarm_r", "cf_j_forearm01_R"),
+            ("hand_r", "cf_j_hand_R"),
+            ("upleg_d_l", "cf_j_thigh00_L"),
+            ("lowleg_d_l", "cf_j_leg01_L"),
+            ("foot_d_l", "cf_j_leg03_L"),
+            ("upleg_d_r", "cf_j_thigh00_R"),
+            ("lowleg_d_r", "cf_j_leg01_R"),
+            ("foot_d_r", "cf_j_leg03_R"),
+        ] {
+            let exp_rot = ref_tree.nodes[ref_tree.by_name[dummy_name]].world_rot;
+            let (_, got_rot) = skel_world_pos_rot(body, cf_j_name);
+            let err = quat_angle_err_rad(got_rot, exp_rot);
+            assert!(
+                err < 5e-4,
+                "bone {cf_j_name} ({dummy_name}) world_rot drifted by {err:.6} rad (got={got_rot:?}, exp={exp_rot:?})"
+            );
+        }
+
+        // Verify leaf corrective twist helpers were recomputed from the final locked cf_j_* pose
+        let (_, arm01_local) = find_skel_bone_ci(body, "cf_d_arm01_L")
+            .map(|(id, tf)| (id, tf.rot))
+            .unwrap();
+        assert!(
+            quat_angle_err_rad(arm01_local, [0.0, 0.0, 0.0, 1.0]) > 0.02,
+            "expected leaf twist helper cf_d_arm01_L to carry corrective twist rotation, got {arm01_local:?}"
+        );
+
+        // Regression guard: non-MMDD Studio animations (`source != "mmdd_vmd"`) do NOT lock over ExpressionBone/ABMX
+        anim.meta.remove("source");
+        let non_mmdd_bytes = anim.to_bytes().unwrap();
+        let mut normal_player =
+            crate::okanim::Player::new(r#"{"type":"anim","anim":0}"#, &[&non_mmdd_bytes]).unwrap();
+        crate::okanim::solve::apply(&mut normal_player, &mut [&mut sess], 3.0 / 30.0, 0.0).unwrap();
+        assert!(!sess.mmdd_world_lock);
+        let unlocked_body = sess.body_skel.as_ref().unwrap();
+        let (_, unlocked_arm_l) = skel_world_pos_rot(unlocked_body, "cf_j_arm00_L");
+        let exp_arm_l = ref_tree.nodes[ref_tree.by_name["uparm_l"]].world_rot;
+        assert!(
+            quat_angle_err_rad(unlocked_arm_l, exp_arm_l) > 0.1,
+            "non-MMDD Studio clip should allow ExpressionBone + ABMX to rotate cf_j_arm00_L normally"
+        );
+    }
+
+    fn open_vanilla_head_session() -> Option<crate::session::OkSession> {
+        for root in mmdd_resource_candidates() {
+            if root.join("oklib.json").is_file() {
+                let _ = crate::oklib::ensure_library(&root);
+            }
+            if let Ok(sess) = crate::extract_session(&root, None, 0, None) {
+                if sess
+                    .parts
+                    .iter()
+                    .any(|p| p.name.to_ascii_lowercase().contains("cf_o_face"))
+                {
+                    return Some(sess);
+                }
+            }
+        }
+        None
+    }
+
+    fn curve_map_at(anim: &OkAnim, vmd_frame: usize) -> std::collections::BTreeMap<String, f32> {
+        let sub = (anim.fps / 30.0).round().max(1.0) as usize;
+        let idx = vmd_frame * sub;
+        anim.curves
+            .iter()
+            .filter_map(|c| c.values.get(idx).map(|&v| (c.name.clone(), v)))
+            .collect()
+    }
+
+    #[test]
+    fn vmd_wink_asymmetry_and_head_mesh_deformation() {
+        let Some(sess) = open_vanilla_head_session() else {
+            eprintln!("skipping: vanilla head session not available");
+            return;
+        };
+        let ini = CharaIniConfig::parse(DEFAULT_CHARA_INI).expect("parse ini");
+        let params = MotionSolveParams::default();
+        let mk = |name: &str, frame_no: u32, weight: f32| VmdMorphKeyFrame {
+            name: name.to_string(),
+            frame_no,
+            weight,
+        };
+        // Frame 0: neutral open
+        // Frame 2: left normal wink (`ウィンク` = 1.0)
+        // Frame 4: left half-width normal wink (`ｳｨﾝｸ` = 1.0)
+        // Frame 6: right normal wink (`ｳｨﾝｸ右` = 1.0)
+        // Frame 8: left happy wink (`ウィンク２` = 1.0)
+        // Frame 10: right happy wink (`ｳｨﾝｸ２右` = 1.0)
+        let vmd = VmdFile {
+            model_name: "WinkTest".into(),
+            bone_keyframes: vec![VmdBoneKeyFrame {
+                name: "センター".into(),
+                frame_no: 12,
+                pos: [0.0; 3],
+                rot: [0.0, 0.0, 0.0, 1.0],
+                ..Default::default()
+            }],
+            morph_keyframes: vec![
+                mk("ウィンク", 0, 0.0),
+                mk("ウィンク", 2, 1.0),
+                mk("ウィンク", 3, 0.0),
+                mk("ｳｨﾝｸ", 3, 0.0),
+                mk("ｳｨﾝｸ", 4, 1.0),
+                mk("ｳｨﾝｸ", 5, 0.0),
+                mk("ｳｨﾝｸ右", 5, 0.0),
+                mk("ｳｨﾝｸ右", 6, 1.0),
+                mk("ｳｨﾝｸ右", 7, 0.0),
+                mk("ウィンク２", 7, 0.0),
+                mk("ウィンク２", 8, 1.0),
+                mk("ウィンク２", 9, 0.0),
+                mk("ｳｨﾝｸ２右", 9, 0.0),
+                mk("ｳｨﾝｸ２右", 10, 1.0),
+                mk("ｳｨﾝｸ２右", 11, 0.0),
+            ],
+            camera_keyframes: Vec::new(),
+            ik_keyframes: Vec::new(),
+        };
+        let anim = solve_vmd_to_okanim(&vmd, &ini, &params, "wink_test").expect("solve wink_test");
+
+        let c_neutral = curve_map_at(&anim, 0);
+        let c_wink_l = curve_map_at(&anim, 2);
+        let c_wink_l_hw = curve_map_at(&anim, 4);
+        let c_wink_r = curve_map_at(&anim, 6);
+        let c_wink2_l = curve_map_at(&anim, 8);
+        let c_wink2_r = curve_map_at(&anim, 10);
+
+        // Curve assertions
+        assert!((c_wink_l["face.eye_open_l"] - 0.0).abs() < 1e-4 && (c_wink_l["face.eye_open_r"] - 1.0).abs() < 1e-4);
+        assert!((c_wink_l["face.eye_wink_l_happy"] - 0.0).abs() < 1e-4);
+        assert!((c_wink_l_hw["face.eye_open_l"] - 0.0).abs() < 1e-4 && (c_wink_l_hw["face.eye_open_r"] - 1.0).abs() < 1e-4);
+        assert!((c_wink_r["face.eye_open_l"] - 1.0).abs() < 1e-4 && (c_wink_r["face.eye_open_r"] - 0.0).abs() < 1e-4);
+        assert!((c_wink2_l["face.eye_open_l"] - 0.0).abs() < 1e-4 && (c_wink2_l["face.eye_wink_l_happy"] - 1.0).abs() < 1e-4);
+        assert!((c_wink2_r["face.eye_open_r"] - 0.0).abs() < 1e-4 && (c_wink2_r["face.eye_wink_r_happy"] - 1.0).abs() < 1e-4);
+        assert!(!c_neutral.contains_key("face.blush"), "VMD without blush must not emit face.blush");
+        assert!(!c_neutral.contains_key("face.iris_small"), "VMD without iris morph must not emit face.iris_small");
+
+        // Actual 3D vertex displacement check on eyeline + face meshes!
+        // Note: in Unity ChaControl local space, character's LEFT eye has X < 0 or X > 0 (opposite signs across X = 0).
+        let face_idx = sess
+            .parts
+            .iter()
+            .position(|p| p.name.to_ascii_lowercase().contains("cf_o_eyeline_00_up"))
+            .or_else(|| {
+                sess.parts
+                    .iter()
+                    .position(|p| p.name.to_ascii_lowercase().contains("cf_o_face"))
+            })
+            .expect("head eyeline/face part");
+
+        let v0 = sess.evaluate_part_face_vertices(face_idx, &c_neutral).unwrap();
+        let v_wl = sess.evaluate_part_face_vertices(face_idx, &c_wink_l).unwrap();
+        let v_wr = sess.evaluate_part_face_vertices(face_idx, &c_wink_r).unwrap();
+        let v_w2l = sess.evaluate_part_face_vertices(face_idx, &c_wink2_l).unwrap();
+        let v_w2r = sess.evaluate_part_face_vertices(face_idx, &c_wink2_r).unwrap();
+
+        let side_disp = |va: &[[f32; 3]], vb: &[[f32; 3]]| -> (f32, f32) {
+            let (mut neg_x, mut pos_x) = (0.0f32, 0.0f32);
+            for (p0, p1) in va.iter().zip(vb.iter()) {
+                let d = vlen(vsub(*p1, *p0));
+                if p0[0] < -0.005 {
+                    neg_x = neg_x.max(d);
+                } else if p0[0] > 0.005 {
+                    pos_x = pos_x.max(d);
+                }
+            }
+            (neg_x, pos_x)
+        };
+
+        let (wl_neg, wl_pos) = side_disp(&v0, &v_wl);
+        let (wr_neg, wr_pos) = side_disp(&v0, &v_wr);
+        println!(
+            "Wink 3D vertex disp ({}): wink_L=(negX={wl_neg:.5}, posX={wl_pos:.5}), wink_R=(negX={wr_neg:.5}, posX={wr_pos:.5})",
+            sess.parts[face_idx].name
+        );
+        // Left wink moves ONLY one side (> 3mm) while the opposite eye stays completely open (< 0.1mm), and Right wink moves the OTHER side!
+        let (wl_active, wl_idle) = if wl_neg > wl_pos { (wl_neg, wl_pos) } else { (wl_pos, wl_neg) };
+        let (wr_active, wr_idle) = if wr_neg > wr_pos { (wr_neg, wr_pos) } else { (wr_pos, wr_neg) };
+        assert!(wl_active > 0.003 && wl_idle < 1e-4, "left wink must close only one eye: active={wl_active}, idle={wl_idle}");
+        assert!(wr_active > 0.003 && wr_idle < 1e-4, "right wink must close only one eye: active={wr_active}, idle={wr_idle}");
+        assert!(
+            (wl_neg > wl_pos) != (wr_neg > wr_pos),
+            "left wink and right wink must deform opposite X hemispheres!"
+        );
+
+        // Verify normal wink (`wink*_op`) vs happy squeezed wink (`gyu*_op`) produce distinct 3D lid geometry
+        let diff_l_happy = v_wl
+            .iter()
+            .zip(v_w2l.iter())
+            .map(|(a, b)| vlen(vsub(*a, *b)))
+            .fold(0.0f32, f32::max);
+        let diff_r_happy = v_wr
+            .iter()
+            .zip(v_w2r.iter())
+            .map(|(a, b)| vlen(vsub(*a, *b)))
+            .fold(0.0f32, f32::max);
+        println!("Normal vs Happy wink max vertex diff: L={diff_l_happy:.5}, R={diff_r_happy:.5}");
+        assert!(diff_l_happy > 0.0005, "expected distinct lid vertices between ウィンク and ウィンク２, got {diff_l_happy}");
+        assert!(diff_r_happy > 0.0005, "expected distinct lid vertices between ｳｨﾝｸ右 and ｳｨﾝｸ２右, got {diff_r_happy}");
+    }
+
+    #[test]
+    fn vmd_blush_iris_shrink_and_compound_morphs() {
+        let Some(mut sess) = open_vanilla_head_session() else {
+            eprintln!("skipping: vanilla head session not available");
+            return;
+        };
+        let ini = CharaIniConfig::parse(DEFAULT_CHARA_INI).expect("parse ini");
+        let params = MotionSolveParams::default();
+        let mk = |name: &str, frame_no: u32, weight: f32| VmdMorphKeyFrame {
+            name: name.to_string(),
+            frame_no,
+            weight,
+        };
+        let vmd = VmdFile {
+            model_name: "Stage3Compound".into(),
+            bone_keyframes: vec![VmdBoneKeyFrame {
+                name: "センター".into(),
+                frame_no: 8,
+                pos: [0.0; 3],
+                rot: [0.0, 0.0, 0.0, 1.0],
+                ..Default::default()
+            }],
+            morph_keyframes: vec![
+                // Cheek blush (`照れ`)
+                mk("照れ", 0, 0.0),
+                mk("照れ", 2, 0.75),
+                // Iris shrink (`瞳小`)
+                mk("瞳小", 0, 0.0),
+                mk("瞳小", 2, 0.6),
+                // Happy closed smile eyes (`笑い` 0 -> 0.5 -> 1.0)
+                mk("笑い", 0, 0.0),
+                mk("笑い", 4, 1.0),
+                // Smooth eyebrow (`困る` = 0.4 at frame 2, `上` = 1.0 at frame 6)
+                mk("困る", 0, 0.0),
+                mk("困る", 2, 0.4),
+                mk("困る", 4, 1.0),
+                mk("上", 4, 0.0),
+                mk("上", 6, 1.0),
+                // Compound mouth: `あ` = 0.8 + `にやり` = 0.7 simultaneously at frame 2, plus `口横広げ` = 1.0 at frame 6
+                mk("あ", 0, 0.0),
+                mk("あ", 2, 0.8),
+                mk("にやり", 0, 0.0),
+                mk("にやり", 2, 0.7),
+                mk("口横広げ", 4, 0.0),
+                mk("口横広げ", 6, 1.0),
+                // cha_eyeset mapped expression (`なごみ` = 31 -> valid EyesCtrl pattern)
+                mk("なごみ", 5, 0.0),
+                mk("なごみ", 6, 1.0),
+            ],
+            camera_keyframes: Vec::new(),
+            ik_keyframes: Vec::new(),
+        };
+        let anim = solve_vmd_to_okanim(&vmd, &ini, &params, "compound_test").expect("solve compound");
+        let c0 = curve_map_at(&anim, 0);
+        let c2 = curve_map_at(&anim, 2);
+        let c4 = curve_map_at(&anim, 4);
+        let c6 = curve_map_at(&anim, 6);
+
+        // 1. Blush (`照れ` = 0.75 -> `_overcolor2[3] == 0.15` on head skin, untouched on body)
+        let body_over2_before: Vec<f32> = sess
+            .parts
+            .iter()
+            .filter(|p| p.role == "body")
+            .map(|p| p.overcolor2[3])
+            .collect();
+        assert!((c2["face.blush"] - 0.75).abs() < 1e-4);
+        assert!(sess.set_blush(c2["face.blush"]));
+        assert!((sess.blush_alpha().unwrap() - 0.75 * 0.2).abs() < 1e-5);
+        let mut checked_head_skin = 0usize;
+        for p in &sess.parts {
+            if p.role == "head" && matches!(p.shader_kind, 5 | 7) {
+                checked_head_skin += 1;
+                assert!(
+                    (p.overcolor2[3] - 0.15).abs() < 1e-5,
+                    "part {} overcolor2 alpha expected 0.15, got {}",
+                    p.name,
+                    p.overcolor2[3]
+                );
+            }
+        }
+        assert!(checked_head_skin > 0, "expected at least one head skin part");
+        let body_over2_after: Vec<f32> = sess
+            .parts
+            .iter()
+            .filter(|p| p.role == "body")
+            .map(|p| p.overcolor2[3])
+            .collect();
+        assert_eq!(body_over2_before, body_over2_after, "body underhair overcolor2 must not be touched by blush");
+
+        // 2. Iris shrink (`瞳小` = 0.6 -> UV scale increases by ~1 / (1 - 0.99*0.6))
+        assert!((c2["face.iris_small"] - 0.6).abs() < 1e-4);
+        let hitomi_idx = sess
+            .parts
+            .iter()
+            .position(|p| p.iris_runtime.is_some())
+            .expect("hitomi part with iris_runtime");
+        let base_uv_span = {
+            let uvs = &sess.parts[hitomi_idx].uvs;
+            let (min_u, max_u) = uvs
+                .iter()
+                .fold((f32::INFINITY, f32::NEG_INFINITY), |(mn, mx), uv| {
+                    (mn.min(uv[0]), mx.max(uv[0]))
+                });
+            max_u - min_u
+        };
+        assert!(sess.set_iris_small(c2["face.iris_small"]));
+        let shrunk_uv_span = {
+            let uvs = &sess.parts[hitomi_idx].uvs;
+            let (min_u, max_u) = uvs
+                .iter()
+                .fold((f32::INFINITY, f32::NEG_INFINITY), |(mn, mx), uv| {
+                    (mn.min(uv[0]), mx.max(uv[0]))
+                });
+            max_u - min_u
+        };
+        // Larger UV span across the eyeball mesh means the iris texture occupies a smaller area on the eyeball (`瞳小`)!
+        let expected_ratio = 1.0 / (1.0 - 0.99 * 0.6);
+        println!("Iris UV span: base={base_uv_span:.4} -> shrunk={shrunk_uv_span:.4} (ratio={:.3}, exp~={expected_ratio:.3})", shrunk_uv_span / base_uv_span);
+        assert!(
+            shrunk_uv_span > base_uv_span * 1.8,
+            "expected iris UV span to expand significantly for 瞳小=0.6, got {base_uv_span} -> {shrunk_uv_span}"
+        );
+        assert!(sess.set_iris_small(0.0));
+
+        // 3. `笑い` at weight 1.0 closes eyes (`open_l == 0`, `open_r == 0`, `happy == 1`) instead of leaving them wide open!
+        assert!((c4["face.eye_open_l"] - 0.0).abs() < 1e-4 && (c4["face.eye_open_r"] - 0.0).abs() < 1e-4);
+        assert!((c4["face.eye_wink_l_happy"] - 1.0).abs() < 1e-4 && (c4["face.eye_wink_r_happy"] - 1.0).abs() < 1e-4);
+
+        // 4. `なごみ` (cha_eyeset 31) maps into valid `EyesCtrl` pattern bounds (not out-of-range 31!)
+        let face_idx = sess
+            .parts
+            .iter()
+            .position(|p| p.name.to_ascii_lowercase().contains("cf_o_face"))
+            .expect("cf_o_face");
+        let n_eye_ptns = sess.parts[face_idx].eye_patterns.len();
+        let nagomi_ptn = c6["face.eye_pattern"].round() as usize;
+        println!("なごみ mapped EyesCtrl pattern = {nagomi_ptn} (total EyesCtrl patterns = {n_eye_ptns})");
+        assert!(
+            nagomi_ptn < n_eye_ptns,
+            "cha_eyeset 31 must resolve within EyesCtrl pattern count {n_eye_ptns}, got {nagomi_ptn}"
+        );
+
+        // 5. Smooth eyebrow interpolation (`困る` at w=0.4 gives intermediate vertex displacement between w=0.0 and w=1.0)
+        let brow_idx = sess
+            .parts
+            .iter()
+            .position(|p| p.name.to_ascii_lowercase().contains("mayuge"))
+            .unwrap_or(face_idx);
+        let b0 = sess.evaluate_part_face_vertices(brow_idx, &c0).unwrap();
+        let b04 = sess.evaluate_part_face_vertices(brow_idx, &c2).unwrap();
+        let b10 = sess.evaluate_part_face_vertices(brow_idx, &c4).unwrap();
+        let disp_04 = b0.iter().zip(b04.iter()).map(|(a, b)| vlen(vsub(*b, *a))).fold(0.0f32, f32::max);
+        let disp_10 = b0.iter().zip(b10.iter()).map(|(a, b)| vlen(vsub(*b, *a))).fold(0.0f32, f32::max);
+        assert!(
+            disp_04 > disp_10 * 0.2 && disp_04 < disp_10 * 0.65,
+            "expected smooth 0.4 eyebrow interpolation: disp_04={disp_04:.5}, disp_10={disp_10:.5}"
+        );
+
+        // 6. Simultaneous `あ=0.8` + `にやり=0.7` differs from pure `あ=0.8` alone on `cf_O_face`
+        let mut c2_pure_a = c2.clone();
+        c2_pure_a.insert("face.mouth_corner_up".into(), 0.0);
+        let m_compound = sess.evaluate_part_face_vertices(face_idx, &c2).unwrap();
+        let m_pure_a = sess.evaluate_part_face_vertices(face_idx, &c2_pure_a).unwrap();
+        let corner_diff = m_compound
+            .iter()
+            .zip(m_pure_a.iter())
+            .map(|(a, b)| vlen(vsub(*a, *b)))
+            .fold(0.0f32, f32::max);
+        println!("Compound あ(0.8)+にやり(0.7) vs pure あ(0.8) max mouth vertex diff = {corner_diff:.5}");
+        assert!(corner_diff > 0.001, "expected にやり corner smile to blend on top of あ, got {corner_diff}");
+
+        // 7. Facial bone morphs (`上` -> `cf_J_Mayu_ty`, `口横広げ` -> `cf_J_MouthBase_ty` X scale) via `okanim::solve::apply`
+        let anim_bytes = anim.to_bytes().unwrap();
+        let mut player =
+            crate::okanim::Player::new(r#"{"type":"anim","anim":0}"#, &[&anim_bytes]).unwrap();
+        crate::okanim::solve::apply(&mut player, &mut [&mut sess], 6.0 / 30.0, 0.0).unwrap();
+        let (mayu_rest_y, mouth_rest_sx) = {
+            let head_posed = sess.head_skel.as_ref().expect("head_skel");
+            let head_rest = sess
+                .head_shaped
+                .as_ref()
+                .or(sess.head_rest.as_ref())
+                .expect("head_shaped/head_rest");
+            let (_, mayu_posed) = find_skel_bone_ci(head_posed, "cf_J_Mayu_ty").expect("cf_J_Mayu_ty");
+            let (_, mayu_rest) = find_skel_bone_ci(head_rest, "cf_J_Mayu_ty").expect("cf_J_Mayu_ty rest");
+            let (_, mouth_posed) = find_skel_bone_ci(head_posed, "cf_J_MouthBase_ty").expect("cf_J_MouthBase_ty");
+            let (_, mouth_rest) = find_skel_bone_ci(head_rest, "cf_J_MouthBase_ty").expect("cf_J_MouthBase_ty rest");
+            assert!(
+                (mayu_posed.pos[1] - mayu_rest.pos[1] - 0.06 * 0.083).abs() < 1e-4,
+                "expected cf_J_Mayu_ty Y offset +0.00498, got {} vs rest {}",
+                mayu_posed.pos[1],
+                mayu_rest.pos[1]
+            );
+            assert!(
+                (mouth_posed.scale[0] - mouth_rest.scale[0] * 1.2).abs() < 1e-3,
+                "expected cf_J_MouthBase_ty X scale ~1.2x rest for 口横広げ=1.0, got {} vs rest {}",
+                mouth_posed.scale[0],
+                mouth_rest.scale[0]
+            );
+            (mayu_rest.pos[1], mouth_rest.scale[0])
+        };
+        // Verify subsequent frame at t=0 resets `head_skel` cleanly without accumulating offsets
+        crate::okanim::solve::apply(&mut player, &mut [&mut sess], 0.0, 0.0).unwrap();
+        let head_reset = sess.head_skel.as_ref().expect("head_skel reset");
+        let (_, mayu_reset) = find_skel_bone_ci(head_reset, "cf_J_Mayu_ty").unwrap();
+        let (_, mouth_reset) = find_skel_bone_ci(head_reset, "cf_J_MouthBase_ty").unwrap();
+        assert!(
+            (mayu_reset.pos[1] - mayu_rest_y).abs() < 1e-5
+                && (mouth_reset.scale[0] - mouth_rest_sx).abs() < 1e-5,
+            "expected head_skel facial bone morphs to reset cleanly on frame 0"
+        );
+    }
+
+    #[test]
+    fn shoes_detect_high_heels_stiletto_and_shoe_state_suppression() {
+        let Some(mut sess) = make_shaped_test_session(vec![0.5; 44], vec![0.5; 52], Vec::new()) else {
+            eprintln!("skipping: standard KK template unavailable");
+            return;
+        };
+        let ini = CharaIniConfig::parse(DEFAULT_CHARA_INI).expect("parse ini");
+        assert!(
+            ini.bones.contains_key("heel_ex_l") && ini.bones.contains_key("heel_ex_r"),
+            "DEFAULT_CHARA_INI must define HEEL_EX_L/R mapped to cf_j_foot_L/R"
+        );
+        assert_eq!(
+            ini.bones["toe_ex_r"].parent.as_deref(),
+            Some("heel_ex_r"),
+            "TOE_EX_R must be parented under HEEL_EX_R"
+        );
+
+        // 1. Stiletto `.txt` config parsing (including 0..360 degree wraparound `333.6774 -> -26.3226`) & flat `.txt` guard
+        let tmp_dir = std::env::temp_dir().join(format!("ok_stiletto_test_{}", std::process::id()));
+        let heels_dir = tmp_dir.join("BepInEx/config/Stiletto/Heels");
+        let _ = std::fs::create_dir_all(&heels_dir);
+        std::fs::write(
+            heels_dir.join("CustomStilettoPump.txt"),
+            "height = 0.0618\nangleLeg = 24.5\nangleAnkle = 19.5\nangleToes = 333.6774\n",
+        )
+        .unwrap();
+        std::fs::write(
+            heels_dir.join("ローファー.txt"),
+            "height = 0\nangleLeg = 0\nangleAnkle = 0\nangleToes = 0\n",
+        )
+        .unwrap();
+        let custom_preset =
+            detect_high_heel_preset("CustomStilettoPump", "", "", &[tmp_dir.as_path()])
+                .expect("expected Stiletto .txt preset");
+        assert!((custom_preset.rot[0] - 24.5).abs() < 1e-3);
+        assert!((custom_preset.rot[1] - 19.5).abs() < 1e-3);
+        assert!((custom_preset.rot[2] - (-26.3226)).abs() < 1e-3);
+        assert!((custom_preset.height - 0.0618).abs() < 1e-4);
+        assert_eq!(
+            detect_high_heel_preset("ローファー", "", "", &[tmp_dir.as_path()]),
+            None,
+            "flat vanilla ローファー must not trigger high-heel compensation"
+        );
+        assert_eq!(
+            detect_high_heel_preset("上履き", "", "", &[]),
+            None,
+            "flat indoor 上履き must not trigger high-heel compensation"
+        );
+        assert!(
+            detect_high_heel_preset("パンプス (Stiletto)", "", "", &[]).is_some(),
+            "built-in Stiletto preset must be detected without external .txt"
+        );
+        assert!(
+            detect_high_heel_preset("Vanilla Heels B", "", "", &[]).is_some(),
+            "built-in Vanilla Heels B preset must be detected"
+        );
+
+        // 2. Solve standing VMD across barefoot / flat shoes / active high heels / shoes-off (`clothesState[7] = 3`)
+        let vmd = VmdFile {
+            model_name: "HeelsTest".into(),
+            bone_keyframes: vec![VmdBoneKeyFrame {
+                name: "全ての親".into(),
+                frame_no: 0,
+                pos: [0.0, 0.0, 0.0],
+                rot: [0.0, 0.0, 0.0, 1.0],
+                ..Default::default()
+            }],
+            morph_keyframes: Vec::new(),
+            camera_keyframes: Vec::new(),
+            ik_keyframes: Vec::new(),
+        };
+        let track_pose = |anim: &OkAnim, bone: &str| -> ([f32; 3], [f32; 4]) {
+            let ti = anim
+                .tracks
+                .iter()
+                .position(|t| t.bone.eq_ignore_ascii_case(bone))
+                .unwrap_or_else(|| panic!("missing track {bone}"));
+            let tr = &anim.tracks[ti];
+            let local_rot = quat_mul(tr.rest_local, anim.rot[ti]);
+            let local_pos = if bone.eq_ignore_ascii_case(&anim.hips_bone) && !anim.hips.is_empty() {
+                let hlen = vlen(anim.hips_rest).max(1e-4);
+                [
+                    anim.hips[0][0] * hlen,
+                    anim.hips[0][1] * hlen,
+                    anim.hips[0][2] * hlen,
+                ]
+            } else {
+                [0.0; 3]
+            };
+            (local_pos, local_rot)
+        };
+
+        let mut rig_flat = MmddCharacterRig::from_session(&sess, 1.0).unwrap();
+        rig_flat.shoe_state = MmddShoeState {
+            has_shoes: true,
+            shoes_active: true,
+            shoe_name: "ローファー".into(),
+            detected_heel: None,
+        };
+        let mut rig_heels_on = rig_flat.clone();
+        rig_heels_on.shoe_state = MmddShoeState {
+            has_shoes: true,
+            shoes_active: true,
+            shoe_name: "CustomStilettoPump".into(),
+            detected_heel: Some(custom_preset),
+        };
+        let mut rig_heels_off = rig_heels_on.clone();
+        rig_heels_off.shoe_state.shoes_active = false;
+
+        let default_params = MotionSolveParams::default();
+        let anim_flat =
+            solve_vmd_to_okanim_for_rig(&vmd, &ini, &default_params, "flat", Some(&rig_flat))
+                .unwrap();
+        let anim_on =
+            solve_vmd_to_okanim_for_rig(&vmd, &ini, &default_params, "heels_on", Some(&rig_heels_on))
+                .unwrap();
+        let anim_off = solve_vmd_to_okanim_for_rig(
+            &vmd,
+            &ini,
+            &default_params,
+            "heels_off",
+            Some(&rig_heels_off),
+        )
+        .unwrap();
+
+        let eval_world_hips = |s: &mut crate::session::OkSession, anim: &OkAnim| -> [f32; 3] {
+            let bytes = anim.to_bytes().unwrap();
+            let mut player =
+                crate::okanim::Player::new(r#"{"type":"anim","anim":0}"#, &[&bytes]).unwrap();
+            crate::okanim::solve::apply(&mut player, &mut [s], 0.0, 0.0).unwrap();
+            let body = s.body_skel.as_ref().unwrap();
+            skel_world_pos_rot(body, "cf_j_hips").0
+        };
+
+        let (hips_flat, thigh_flat) = (
+            eval_world_hips(&mut sess, &anim_flat),
+            track_pose(&anim_flat, "cf_j_thigh00_R").1,
+        );
+        let (hips_on, thigh_on) = (
+            eval_world_hips(&mut sess, &anim_on),
+            track_pose(&anim_on, "cf_j_thigh00_R").1,
+        );
+        let hips_off = eval_world_hips(&mut sess, &anim_off);
+
+        let (_, leg03_flat) = track_pose(&anim_flat, "cf_j_leg03_R");
+        let (_, foot_flat) = track_pose(&anim_flat, "cf_j_foot_R");
+        let (_, toes_flat) = track_pose(&anim_flat, "cf_j_toes_R");
+
+        let (_, leg03_on) = track_pose(&anim_on, "cf_j_leg03_R");
+        let (_, foot_on) = track_pose(&anim_on, "cf_j_foot_R");
+        let (_, toes_on) = track_pose(&anim_on, "cf_j_toes_R");
+
+        let (_, leg03_off) = track_pose(&anim_off, "cf_j_leg03_R");
+        let (_, foot_off) = track_pose(&anim_off, "cf_j_foot_R");
+        let (_, toes_off) = track_pose(&anim_off, "cf_j_toes_R");
+
+        let euler_leg03 = quat_to_unity_euler(quat_mul(qinv(leg03_flat), leg03_on));
+        let euler_foot = quat_to_unity_euler(quat_mul(qinv(foot_flat), foot_on));
+        let euler_toes = quat_to_unity_euler(quat_mul(qinv(toes_flat), toes_on));
+        let pitch_leg03 = normalize_signed_deg(euler_leg03[0]);
+        let pitch_foot = normalize_signed_deg(euler_foot[0]);
+        let pitch_toes = normalize_signed_deg(euler_toes[0]);
+        println!(
+            "High-heels solved deltas: leg03_pitch={pitch_leg03:.2}°, foot_pitch={pitch_foot:.2}°, toes_pitch={pitch_toes:.2}°, hips_dy={:.4}m",
+            hips_on[1] - hips_flat[1]
+        );
+        assert!(
+            (pitch_leg03 - 24.5).abs() < 1.0,
+            "expected cf_j_leg03_R pitch ~+24.5°, got {pitch_leg03}"
+        );
+        assert!(
+            (pitch_foot - 19.5).abs() < 1.0,
+            "expected cf_j_foot_R pitch ~+19.5°, got {pitch_foot}"
+        );
+        assert!(
+            (pitch_toes - (-26.32)).abs() < 1.0,
+            "expected cf_j_toes_R counter-pitch ~-26.32°, got {pitch_toes}"
+        );
+        assert!(
+            ((hips_on[1] - hips_flat[1]) - 0.0618).abs() < 1e-3,
+            "expected hips Y lifted by +0.0618m, got {}",
+            hips_on[1] - hips_flat[1]
+        );
+        // `upleg_d` (`cf_j_thigh00_R`) must NOT be rotated when IK is at rest and high heels only pitch foot/heel/toes
+        assert!(
+            qdot(thigh_flat, thigh_on).abs() > 0.9999,
+            "high heels must not spuriously rotate cf_j_thigh00_R"
+        );
+        // When shoes are taken off (`shoes_active == false`), heel rotation and lift are completely suppressed!
+        assert!(
+            qdot(leg03_flat, leg03_off).abs() > 0.99999
+                && qdot(foot_flat, foot_off).abs() > 0.99999
+                && qdot(toes_flat, toes_off).abs() > 0.99999
+                && (hips_off[1] - hips_flat[1]).abs() < 1e-5,
+            "shoes OFF must suppress high-heel angles and lift"
+        );
+
+        // 3. `ShoesOffset` `[true, on_y, off_y]` + `custom_base_pos` (`posadj`) no-double-add verification
+        let mut so_params = MotionSolveParams {
+            shoes_offset: Some((true, 0.065, -0.015)),
+            ..Default::default()
+        };
+        so_params.custom_base_pos.insert("root".into(), [0.0, 0.065, 0.0]);
+        let anim_so_on =
+            solve_vmd_to_okanim_for_rig(&vmd, &ini, &so_params, "so_on", Some(&rig_heels_on))
+                .unwrap();
+        let anim_so_off =
+            solve_vmd_to_okanim_for_rig(&vmd, &ini, &so_params, "so_off", Some(&rig_heels_off))
+                .unwrap();
+        let dy_so_on = eval_world_hips(&mut sess, &anim_so_on)[1] - hips_flat[1];
+        let dy_so_off = eval_world_hips(&mut sess, &anim_so_off)[1] - hips_flat[1];
+        assert!(
+            (dy_so_on - 0.065).abs() < 1e-3,
+            "expected exact +0.065m (no 2x double-add with posadj), got {dy_so_on}"
+        );
+        assert!(
+            (dy_so_off - (-0.015)).abs() < 1e-3,
+            "expected ShoesOffset[2] = -0.015m when shoes are off, got {dy_so_off}"
+        );
+
+        // 4. Live `ok_okanim_from_vmd` C ABI shoe detection & cache invalidation when toggling shoe visibility
+        let vmd_path = tmp_dir.join("live_shoe_test.vmd");
+        {
+            // Minimal valid 30-byte header + 20-byte model + 4-byte bone count(1) + 111-byte bone kf + 4-byte morph(0) + 4-byte cam(0) + 4-byte light(0)
+            let mut raw = Vec::new();
+            let mut hdr = [0u8; 30];
+            hdr[..25].copy_from_slice(b"Vocaloid Motion Data 0002");
+            raw.extend_from_slice(&hdr);
+            raw.extend_from_slice(&[0u8; 20]);
+            raw.extend_from_slice(&1u32.to_le_bytes());
+            let mut bname = [0u8; 15];
+            // Shift-JIS for "全ての親": 0x91, 0x53, 0x82, 0xc4, 0x82, 0xcc, 0x90, 0x65
+            let sjis = [0x91u8, 0x53, 0x82, 0xc4, 0x82, 0xcc, 0x90, 0x65];
+            bname[..sjis.len()].copy_from_slice(&sjis);
+            raw.extend_from_slice(&bname);
+            raw.extend_from_slice(&0u32.to_le_bytes());
+            for f in [0.0f32, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0] {
+                raw.extend_from_slice(&f.to_le_bytes());
+            }
+            raw.extend_from_slice(&[20u8; 64]);
+            for _ in 0..3 {
+                raw.extend_from_slice(&0u32.to_le_bytes());
+            }
+            std::fs::write(&vmd_path, &raw).unwrap();
+        }
+        sess.game_root = tmp_dir.clone();
+        sess.active_shoe_meta = Some(("CustomStilettoPump".into(), String::new(), String::new()));
+        let mut shoe_part =
+            crate::session::SessionPart::from_mesh("clothes_shoes", &Default::default(), "opaque", false);
+        shoe_part.name = "CustomStilettoPump".into();
+        shoe_part.render_visible = true;
+        sess.parts.push(shoe_part);
+
+        let c_vmd = std::ffi::CString::new(vmd_path.to_str().unwrap()).unwrap();
+        let c_params = std::ffi::CString::new("{}").unwrap();
+        let solve_via_ffi = |s: &crate::session::OkSession| -> OkAnim {
+            unsafe {
+                let sz = crate::okanim::ffi::ok_okanim_from_vmd(
+                    s,
+                    c_vmd.as_ptr(),
+                    c_params.as_ptr(),
+                    std::ptr::null_mut(),
+                    0,
+                );
+                assert!(sz > 0, "ok_okanim_from_vmd size failed: {sz}");
+                let mut buf = vec![0u8; sz as usize];
+                let wrote = crate::okanim::ffi::ok_okanim_from_vmd(
+                    s,
+                    c_vmd.as_ptr(),
+                    c_params.as_ptr(),
+                    buf.as_mut_ptr(),
+                    sz,
+                );
+                assert_eq!(wrote, sz);
+                OkAnim::from_bytes(&buf).unwrap()
+            }
+        };
+        let ffi_on = solve_via_ffi(&sess);
+        sess.parts[0].render_visible = false; // Take shoes off live!
+        let ffi_off = solve_via_ffi(&sess);
+        let ffi_pitch = normalize_signed_deg(
+            quat_to_unity_euler(quat_mul(
+                qinv(track_pose(&ffi_off, "cf_j_leg03_R").1),
+                track_pose(&ffi_on, "cf_j_leg03_R").1,
+            ))[0],
+        );
+        assert!(
+            (ffi_pitch - 24.5).abs() < 1.0,
+            "live ok_okanim_from_vmd must detect high heels when visible and invalidate cache when hidden, got pitch diff {ffi_pitch}"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn vmd_head_bone_morphs_skin_vertices_and_skel_export_end_to_end() {
+        let Some(mut sess) = open_vanilla_head_session() else {
+            eprintln!("skipping: vanilla head session not available");
+            return;
+        };
+        let _ = sess.ensure_skel_export();
+        let ini = CharaIniConfig::parse(DEFAULT_CHARA_INI).expect("parse ini");
+        let params = MotionSolveParams::default();
+        let mk = |name: &str, frame_no: u32, weight: f32| VmdMorphKeyFrame {
+            name: name.to_string(),
+            frame_no,
+            weight,
+        };
+        let vmd = VmdFile {
+            model_name: "HeadBoneMorphE2E".into(),
+            bone_keyframes: vec![VmdBoneKeyFrame {
+                name: "センター".into(),
+                frame_no: 6,
+                pos: [0.0; 3],
+                rot: [0.0, 0.0, 0.0, 1.0],
+                ..Default::default()
+            }],
+            morph_keyframes: vec![
+                mk("上", 0, 0.0),
+                mk("上", 2, 1.0),
+                mk("上", 4, 0.0),
+                mk("下", 2, 0.0),
+                mk("下", 4, 1.0),
+                mk("下", 6, 0.0),
+                mk("口横広げ", 2, 0.0),
+                mk("口横広げ", 4, 1.0),
+                mk("口横広げ", 6, 0.0),
+            ],
+            camera_keyframes: Vec::new(),
+            ik_keyframes: Vec::new(),
+        };
+        let anim = solve_vmd_to_okanim(&vmd, &ini, &params, "head_bone_e2e").unwrap();
+        let anim_bytes = anim.to_bytes().unwrap();
+        let mut player =
+            crate::okanim::Player::new(r#"{"type":"anim","anim":0}"#, &[&anim_bytes]).unwrap();
+
+        let brow_idx = sess
+            .parts
+            .iter()
+            .position(|p| p.name.to_ascii_lowercase().contains("mayuge"))
+            .expect("cf_O_mayuge part");
+        let face_idx = sess
+            .parts
+            .iter()
+            .position(|p| p.name.to_ascii_lowercase().contains("cf_o_face"))
+            .expect("cf_O_face part");
+
+        let step_and_capture = |sess: &mut crate::session::OkSession,
+                                player: &mut crate::okanim::Player,
+                                t: f32|
+         -> (
+            [f32; 3],
+            [f32; 3],
+            Vec<[f32; 3]>,
+            Vec<[f32; 3]>,
+        ) {
+            crate::okanim::solve::apply(player, &mut [sess], t, 0.0).unwrap();
+            // Refresh GPU export bones (exact path consumed by UE `AKKPreviewActor::RefreshSkinnedDisplay`)
+            let (mayu_export_pos, mouth_export_scl) = {
+                let mut ex = sess.skel_export.take().expect("skel_export");
+                crate::skel_export::refresh_pose(sess, &mut ex);
+                let mayu = ex
+                    .bones
+                    .iter()
+                    .find(|b| b.name.eq_ignore_ascii_case("cf_J_Mayu_ty"))
+                    .expect("ExportBone cf_J_Mayu_ty")
+                    .pose_pos;
+                let mouth = ex
+                    .bones
+                    .iter()
+                    .find(|b| b.name.eq_ignore_ascii_case("cf_J_MouthBase_ty"))
+                    .expect("ExportBone cf_J_MouthBase_ty")
+                    .pose_scl;
+                sess.skel_export = Some(ex);
+                (mayu, mouth)
+            };
+            // Also verify `head_skel` and `head_full_posed` stay synchronized
+            if let (Some(hs), Some(hf)) = (sess.head_skel.as_ref(), sess.head_full_posed.as_ref()) {
+                let (_, hm) = find_skel_bone_ci(hs, "cf_J_Mayu_ty").unwrap();
+                let (_, fm) = find_skel_bone_ci(hf, "cf_J_Mayu_ty").unwrap();
+                assert!(
+                    (hm.pos[1] - fm.pos[1]).abs() < 1e-6,
+                    "head_skel and head_full_posed cf_J_Mayu_ty must stay synchronized"
+                );
+                let (_, hmo) = find_skel_bone_ci(hs, "cf_J_MouthBase_ty").unwrap();
+                let (_, fmo) = find_skel_bone_ci(hf, "cf_J_MouthBase_ty").unwrap();
+                assert!(
+                    (hmo.scale[0] - fmo.scale[0]).abs() < 1e-6,
+                    "head_skel and head_full_posed cf_J_MouthBase_ty must stay synchronized"
+                );
+            }
+            // Also run CPU skinning (`sess.skin_all()`) to verify actual 3D vertex deformation on eyebrow & mouth meshes
+            sess.skin_all();
+            (
+                mayu_export_pos,
+                mouth_export_scl,
+                sess.parts[brow_idx].positions.clone(),
+                sess.parts[face_idx].positions.clone(),
+            )
+        };
+
+        let (mayu0, mouth_scl0, brow_v0, face_v0) = step_and_capture(&mut sess, &mut player, 0.0);
+        let (mayu2, _mouth_scl2, brow_v2, _face_v2) =
+            step_and_capture(&mut sess, &mut player, 2.0 / 30.0);
+        let (_mayu4, mouth_scl4, brow_v4, face_v4) =
+            step_and_capture(&mut sess, &mut player, 4.0 / 30.0);
+        let (mayu6, mouth_scl6, brow_v6, face_v6) =
+            step_and_capture(&mut sess, &mut player, 6.0 / 30.0);
+
+        // Frame 2 (`上 = 1.0`): GPU ExportBone and CPU-skinned eyebrow vertices shift upward (+Y in Unity / +Z in UE export)
+        let export_up_delta = vlen(vsub(mayu2, mayu0));
+        let brow_up_dy = brow_v2
+            .iter()
+            .zip(brow_v0.iter())
+            .map(|(p2, p0)| p2[1] - p0[1])
+            .fold(0.0f32, f32::max);
+        // Frame 4 (`下 = 1.0`, `口横広げ = 1.0`): eyebrow shifts downward (-Y) and mouth widens (`pose_scl` * 1.2 & wider |X| vertices)
+        let brow_down_dy = brow_v4
+            .iter()
+            .zip(brow_v0.iter())
+            .map(|(p4, p0)| p4[1] - p0[1])
+            .fold(0.0f32, f32::min);
+        let max_mouth_widen_dx = face_v4
+            .iter()
+            .zip(face_v0.iter())
+            .map(|(p4, p0)| p4[0].abs() - p0[0].abs())
+            .fold(0.0f32, f32::max);
+        println!(
+            "Head bone E2E: export_mayu_disp={export_up_delta:.5}, brow_up_dy=+{brow_up_dy:.5}m, brow_down_dy={brow_down_dy:.5}m, mouth_export_scl={mouth_scl0:?}->{mouth_scl4:?}, mouth_widen_dx=+{max_mouth_widen_dx:.5}m"
+        );
+        assert!(export_up_delta > 0.004, "expected ExportBone cf_J_Mayu_ty displacement > 0.004, got {export_up_delta}");
+        assert!(brow_up_dy > 0.004, "expected cf_O_mayuge vertices to rise > 4mm on 上=1.0, got {brow_up_dy}");
+        assert!(brow_down_dy < -0.004, "expected cf_O_mayuge vertices to drop < -4mm on 下=1.0 without accumulation, got {brow_down_dy}");
+        let scl_changed = (0..3).any(|ax| (mouth_scl4[ax] - mouth_scl0[ax] * 1.2).abs() < 1e-3);
+        assert!(
+            scl_changed,
+            "expected ExportBone cf_J_MouthBase_ty lateral scale 1.2x, got {mouth_scl0:?} -> {mouth_scl4:?}"
+        );
+        assert!(
+            max_mouth_widen_dx > 0.001,
+            "expected cf_O_face mouth vertices to widen outward along X for 口横広げ=1.0, got {max_mouth_widen_dx}"
+        );
+
+        // Frame 6 (weights back to 0.0): exact return to Frame 0 neutral (`< 1e-6` drift)
+        assert!(!sess.mmdd_face_bone_dirty, "mmdd_face_bone_dirty must clear when bone morph weights return to 0");
+        assert!(vlen(vsub(mayu6, mayu0)) < 1e-6 && vlen(vsub(mouth_scl6, mouth_scl0)) < 1e-6);
+        let max_brow_residual = brow_v6
+            .iter()
+            .zip(brow_v0.iter())
+            .map(|(a, b)| vlen(vsub(*a, *b)))
+            .fold(0.0f32, f32::max);
+        let max_face_residual = face_v6
+            .iter()
+            .zip(face_v0.iter())
+            .map(|(a, b)| vlen(vsub(*a, *b)))
+            .fold(0.0f32, f32::max);
+        assert!(
+            max_brow_residual < 1e-6 && max_face_residual < 1e-6,
+            "expected zero residual head mesh drift after bone morph reset, got brow={max_brow_residual}, face={max_face_residual}"
+        );
     }
 }

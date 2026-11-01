@@ -90,6 +90,8 @@ pub struct CardInfo {
     pub status_eyes_look_ptn: i32,
     pub status_neck_look_ptn: i32,
     pub status_coordinate: i32,
+    /// ChaFileStatus.shoesType: 0 indoor (slot 7), 1 outdoor (slot 8, default in ChaFileStatus).
+    pub status_shoes_type: u8,
     /// ChaFileStatus.clothesState: per clothes part, 0 on, 1 half, 2/3 off (empty: not saved).
     pub status_clothes: Vec<u8>,
     /// ChaFileStatus.showAccessory: per accessory slot (20), whether it is shown.
@@ -2270,6 +2272,7 @@ pub(crate) fn parse_card_bytes_mode_cached(data:&[u8],outfit:i32,apply_shape_plu
         status_eyes_look_ptn: -1,
         status_neck_look_ptn: -1,
         status_coordinate: -1,
+        status_shoes_type: 1,
         status_clothes: Vec::new(),
         show_accessory: vec![true; 20],
         siru_lv: [0; 5],
@@ -2362,6 +2365,7 @@ pub(crate) fn parse_card_bytes_mode_cached(data:&[u8],outfit:i32,apply_shape_plu
                     .map(as_f32).unwrap_or(info.skin_tuya_rate);
                 info.tears_lv = map_get(&val, "tearsLv").map(as_i32).unwrap_or(info.tears_lv);
                 info.status_coordinate = map_get(&val, "coordinateType").map(as_i32).unwrap_or(info.status_coordinate);
+                info.status_shoes_type = map_get(&val, "shoesType").map(|v| as_i32(v).clamp(0, 1) as u8).unwrap_or(info.status_shoes_type);
                 info.status_eyebrow_ptn = map_get(&val, "eyebrowPtn").map(as_i32).unwrap_or(info.status_eyebrow_ptn);
                 info.status_eyes_ptn = map_get(&val, "eyesPtn").map(as_i32).unwrap_or(info.status_eyes_ptn);
                 info.status_mouth_ptn = map_get(&val, "mouthPtn").map(as_i32).unwrap_or(info.status_mouth_ptn);

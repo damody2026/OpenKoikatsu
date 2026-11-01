@@ -1410,6 +1410,9 @@ pub fn clip_limb_corrections(game_root: &Path, want: &str) -> (bool, bool) {
 }
 
 fn clip_scene(game_root: &Path, want: &str) -> ClipScene {
+    if game_root.as_os_str().is_empty() || want.is_empty() {
+        return ClipScene::Maker;
+    }
     if let Some((source,_))=want.split_once('|') {
         if let Some(source)=source.strip_prefix(controller::SOURCE_PREFIX) {
             if let Some(source)=source_path(game_root,source) {return scene_for_source(&source);}

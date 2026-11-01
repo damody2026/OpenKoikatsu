@@ -1157,6 +1157,83 @@ pub fn apply_expression_bone(skel: &mut Skeleton) {
     skel.rebuild_worlds();
 }
 
+/// Returns true for pure leaf/twist corrective deform helpers driven by final `cf_j_*`
+/// transforms (none of which is an ancestor of any MMDD-synced `cf_j_*` bone).
+pub(crate) fn is_leaf_corrective_expression_bone(name: &str) -> bool {
+    matches!(
+        name,
+        "cf_d_arm01_L"
+            | "cf_d_arm02_L"
+            | "cf_d_arm03_L"
+            | "cf_d_arm01_R"
+            | "cf_d_arm02_R"
+            | "cf_d_arm03_R"
+            | "cf_s_elbo_L"
+            | "cf_s_elboback_L"
+            | "cf_s_elbo_R"
+            | "cf_s_elboback_R"
+            | "cf_d_hand_L"
+            | "cf_d_wrist_L"
+            | "cf_d_forearm02_L"
+            | "cf_d_hand_R"
+            | "cf_d_wrist_R"
+            | "cf_d_forearm02_R"
+            | "cf_d_thigh01_L"
+            | "cf_d_thigh02_L"
+            | "cf_d_thigh03_L"
+            | "cf_d_thigh01_R"
+            | "cf_d_thigh02_R"
+            | "cf_d_thigh03_R"
+            | "cf_s_kneeB_L"
+            | "cf_d_kneeF_L"
+            | "cf_s_kneeB_R"
+            | "cf_d_kneeF_R"
+            | "cf_d_leg02_L"
+            | "cf_d_leg02_R"
+            | "cf_d_bust00"
+            | "cf_d_hit_bust_L"
+            | "cf_d_hit_bust_R"
+            | "a_n_neck"
+    )
+}
+
+fn apply_expression_bone_arm_twists_only(skel: &mut Skeleton) {
+    let name2id = rig_name_index(skel, false);
+    let get = |n: &str| name2id.get(n).copied();
+    for side in ["L", "R"] {
+        let Some(i_arm) = get(&format!("cf_j_arm00_{side}")) else {
+            continue;
+        };
+        let arm_rot = skel.tfs.get(&i_arm).map(|t| t.rot).unwrap_or([0.0, 0.0, 0.0, 1.0]);
+        let x = quat_to_euler_deg(5, arm_rot)[0];
+        for (bone, coef) in [
+            (format!("cf_d_arm01_{side}"), 0.6f32),
+            (format!("cf_d_arm02_{side}"), 0.5),
+            (format!("cf_d_arm03_{side}"), 0.125),
+        ] {
+            if let Some(id) = get(&bone) {
+                let rot = skel.tfs.get(&id).map(|t| t.rot).unwrap_or([0.0, 0.0, 0.0, 1.0]);
+                let mut e = quat_to_euler_deg(5, rot);
+                e[0] = -x * coef;
+                if let Some(tf) = skel.tfs.get_mut(&id) {
+                    tf.rot = euler_order_to_quat(5, e[0], e[1], e[2]);
+                }
+            }
+        }
+    }
+}
+
+/// Recomputes pure leaf/twist ExpressionBone helpers from the final world-locked `cf_j_*`
+/// pose without touching intermediate parent bones (`cf_d_shoulder02_L/R`, `cf_s_leg_L/R`, `cf_d_siri_L/R`).
+pub(crate) fn apply_expression_bone_leaf_twists(skel: &mut Skeleton) {
+    apply_expression_bone_arm_twists_only(skel);
+    apply_expression_bone_elbows_impl(skel, false);
+    apply_expression_bone_hands_impl(skel, false);
+    apply_expression_bone_leg_twists_impl(skel, false);
+    apply_expression_bone_bust_impl(skel, false);
+    apply_expression_bone_acs_null_impl(skel, false);
+}
+
 /// LegL/R use a calculation Transform with thigh WORLD position and waist
 /// WORLD rotation, then the helpers created by ExpressionBone.Initialize.
 pub fn apply_expression_bone_leg_positions(skel: &mut Skeleton) {

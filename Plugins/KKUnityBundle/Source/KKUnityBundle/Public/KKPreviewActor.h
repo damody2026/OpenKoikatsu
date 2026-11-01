@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -387,6 +387,26 @@ public:
 	float FaceOpen01[2] = {0.92f, 1.f};
 	int32 FacePattern[2] = {0, 0};
 	bool bManualFaceControl[2] = {false, false};
+	void SetEyeOpenAsymmetric(float Left01, float Right01, float WinkLeftHappy = 0.f, float WinkRightHappy = 0.f, float ExprWeight = 1.f, float WideWeight = 0.f);
+	void ClearAsymmetricEyes();
+	void SetCompoundFaceWeights(float InBrowWeight, float InMouthWeight, float InMouthCornerUp, float InMouthCornerDown);
+	void ResetTransientFaceOverrides(bool bRefreshDisplay = true);
+	UFUNCTION(BlueprintCallable, Category="Koikatsu|Expression")
+	bool SetBlush(float Rate01);
+	UFUNCTION(BlueprintCallable, Category="Koikatsu|Expression")
+	bool SetIrisSmall(float Rate);
+	bool bAsymmetricEyes = false;
+	float EyeOpenLR[2] = {1.f, 1.f};
+	float EyeWinkHappyLR[2] = {0.f, 0.f};
+	float EyeExprWeight = 0.f;
+	float EyeWideWeight = 0.f;
+	float BrowWeight = 1.f;
+	float MouthWeight = 1.f;
+	float MouthCornerUp = 0.f;
+	float MouthCornerDown = 0.f;
+	float DefaultBlushRate = 0.f;
+	float BlushRate = -1.f;
+	float IrisSmallRate = 0.f;
 	UFUNCTION(BlueprintCallable, Category="Koikatsu|Animation")
 	bool SetHandShape(int32 Side, bool Enabled, int32 A, int32 B, float Blend);
 	UFUNCTION(BlueprintPure, Category="Koikatsu|Animation")
@@ -588,6 +608,13 @@ public:
 		TArray<TPair<FName, FName>> BrowPatterns;
 		TMap<FName, float> BaselineWeights;
         TArray<FName> MorphNames;
+		FName WinkLeftOpen = NAME_None;
+		FName WinkRightOpen = NAME_None;
+		FName HappyWinkLeftOpen = NAME_None;
+		FName HappyWinkRightOpen = NAME_None;
+		FName HappyBothClosed = NAME_None;
+		FName MouthCornerUp = NAME_None;
+		FName MouthCornerDown = NAME_None;
 		bool bHideWhenClosed = false;
 	};
 	TArray<FOkMouthSlot> MouthSlots;

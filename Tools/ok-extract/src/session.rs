@@ -1234,6 +1234,14 @@ pub struct OkSession {
     pub(crate) anim_layer_crossfades: std::collections::BTreeMap<usize,crate::anim::crossfade::CrossFade>,
     /// 0 = source default; 1 = Maker; 2 = normal gameplay; 3 = H/esthetic; 4 = Studio.
     pub anim_scene_mode: i32,
+    /// True when the active animation comes from MMDD (`DefWeightSyncMode=global`): locks `cf_j_*` world rotations
+    /// across ExpressionBone and ABMX intermediate deform bone updates.
+    pub(crate) mmdd_world_lock: bool,
+    /// True when `apply_mmdd_face_bone_curves` modified `cf_J_Mayu_ty` / `cf_J_MouthBase_ty` on `head_skel` / `head_full_posed`.
+    pub(crate) mmdd_face_bone_dirty: bool,
+    /// Active shoe metadata `(entry_name, main_data, mod_guid)` for the outfit's `shoesType` slot.
+    pub(crate) active_shoe_meta: Option<(String, String, String)>,
+    pub(crate) face_runtime: FaceRuntimeState,
     pub body_shaped: Option<Skeleton>,
     // Runtime-only allocation reuse; restored from the complete current shaped
     // skeleton before ABMX/reference evaluation. Never serialized or history.
@@ -1262,10 +1270,489 @@ pub(crate) struct HeadTextureDelta {
     pub parts:Vec<HeadTextureDeltaPart>,
 }
 
+#[derive(Clone, Debug, Default)]
+pub(crate) struct FaceRuntimeState {
+    pub iris_base_settings: Vec<(usize, [f32; 2])>,
+    pub iris_small_rate: f32,
+    pub last_eye_gaze: [f32; 3],
+    pub blush_rate: Option<f32>,
+}
+
 impl OkSession {
-    /// Publish a validated exact-slot candidate without replacing retained
-    /// parts or their private dynamics. UE must stage its matching components
-    /// and validate this transaction before performing the paired publication.
+    pub fn set_eye_gaze_rates(&mut self, left: f32, right: f32, vertical: f32) -> bool {
+        if !left.is_finite() || !right.is_finite() || !vertical.is_finite() {
+            return false;
+        }
+        let lh = left.clamp(-1.0, 1.0);
+        let rh = right.clamp(-1.0, 1.0);
+        let v = vertical.clamp(-1.0, 1.0);
+        self.face_runtime.last_eye_gaze = [lh, rh, v];
+        for part in &mut self.parts {
+            if let Some(runtime) = part.iris_runtime.as_ref() {
+                let h = if runtime.settings[0] == 1.0 { rh } else { lh };
+                runtime.apply(&mut part.uvs, h, v);
+                if let Some(draw) = part.eye_draw.as_mut() {
+                    draw.apply(runtime.st(h, v), &runtime.raw_uvs, &mut part.uv2, &mut part.uv3);
+                }
+            }
+        }
+        true
+    }
+
+    /// KKS MMDD `get_iris_size_kk` / `set_iris_size_kk` (`瞳小` / `瞳大`):
+    /// At `rate` in `0..=1`, scales card baseline `(pupilWidth, pupilHeight)` by `1.0 - 0.99 * rate`
+    /// (`rate = 1.0` -> `0.01x` baseline, zooming UV tiling out toward `sx = sy ≈ 2.79`).
+    /// Negative `rate` in `-1..0` (`瞳大`) enlarges pupil scale up to `1.8x`.
+    pub fn set_iris_small(&mut self, rate: f32) -> bool {
+        if !rate.is_finite() {
+            return false;
+        }
+        let r = rate.clamp(-1.0, 1.0);
+        if self.face_runtime.iris_base_settings.is_empty() {
+            for (idx, part) in self.parts.iter().enumerate() {
+                if let Some(runtime) = part.iris_runtime.as_ref() {
+                    self.face_runtime
+                        .iris_base_settings
+                        .push((idx, [runtime.settings[12], runtime.settings[13]]));
+                }
+            }
+        }
+        let scale = if r >= 0.0 {
+            (1.0 - 0.99 * r).clamp(0.01, 1.0)
+        } else {
+            1.0 - 0.8 * r
+        };
+        let mut any = false;
+        for &(idx, [base_s12, base_s13]) in &self.face_runtime.iris_base_settings {
+            if let Some(runtime) = self.parts.get_mut(idx).and_then(|p| p.iris_runtime.as_mut()) {
+                let base_w = ((1.8 - base_s12) * 0.5).clamp(0.02, 1.0);
+                let base_h = ((1.8 - base_s13) * 0.5).clamp(0.02, 1.0);
+                runtime.settings[12] = 1.8 - 2.0 * (base_w * scale).clamp(0.0, 1.0);
+                runtime.settings[13] = 1.8 - 2.0 * (base_h * scale).clamp(0.0, 1.0);
+                any = true;
+            }
+        }
+        self.face_runtime.iris_small_rate = r;
+        let [lh, rh, v] = self.face_runtime.last_eye_gaze;
+        self.set_eye_gaze_rates(lh, rh, v);
+        any || self.parts.is_empty()
+    }
+
+    /// KKS `ChaControl.ChangeHohoAkaRate` (`照れ` / `赤面`):
+    /// Updates head skin `_overcolor2.a = 0.2 * rate.clamp(0.0, 1.0)`.
+    pub fn set_blush(&mut self, rate: f32) -> bool {
+        if !rate.is_finite() {
+            return false;
+        }
+        let r = rate.clamp(0.0, 1.0);
+        let alpha = 0.2 * r;
+        for part in &mut self.parts {
+            if part.role == "head" && matches!(part.shader_kind, 5 | 7) {
+                part.overcolor2[3] = alpha;
+                if let Some(mat) = part.source_material.as_mut() {
+                    if let Some(col) = mat.colors.get_mut("_overcolor2") {
+                        col[3] = alpha;
+                    }
+                }
+            }
+        }
+        self.face_runtime.blush_rate = Some(r);
+        true
+    }
+
+    pub fn blush_alpha(&self) -> Option<f32> {
+        self.parts
+            .iter()
+            .find(|p| p.role == "head" && matches!(p.shader_kind, 5 | 7))
+            .map(|p| p.overcolor2[3])
+    }
+
+    /// Applies MMDD facial bone morphs (`上`/`下` -> `cf_J_Mayu_ty` Y offset, `口横広げ` -> `cf_J_MouthBase_ty` X scale)
+    /// onto `head_skel` (and mirrors onto `head_full_posed`) after `ok_begin_frame` resets `head_skel` from `head_shaped`.
+    pub(crate) fn apply_mmdd_face_bone_curves(&mut self, brow_offset_y: f32, mouth_wider: f32) {
+        if brow_offset_y.abs() <= 1e-5 && mouth_wider.abs() <= 1e-5 {
+            return;
+        }
+        let mut synced: Vec<(&'static str, [f32; 3], [f32; 4], [f32; 3])> = Vec::new();
+        if let Some(skel) = self.head_skel.as_mut() {
+            for tf in skel.tfs.values_mut() {
+                if brow_offset_y.abs() > 1e-5 && tf.name.eq_ignore_ascii_case("cf_J_Mayu_ty") {
+                    tf.pos[1] += brow_offset_y;
+                    synced.push(("cf_J_Mayu_ty", tf.pos, tf.rot, tf.scale));
+                } else if mouth_wider.abs() > 1e-5 && tf.name.eq_ignore_ascii_case("cf_J_MouthBase_ty") {
+                    tf.scale[0] *= 1.0 + 0.2 * mouth_wider;
+                    synced.push(("cf_J_MouthBase_ty", tf.pos, tf.rot, tf.scale));
+                }
+            }
+            if !synced.is_empty() {
+                skel.rebuild_worlds();
+            }
+        }
+        if !synced.is_empty() {
+            if let Some(full) = self.head_full_posed.as_mut() {
+                let mut full_changed = false;
+                for tf in full.tfs.values_mut() {
+                    for &(bname, pos, rot, scale) in &synced {
+                        if tf.name.eq_ignore_ascii_case(bname) {
+                            tf.pos = pos;
+                            tf.rot = rot;
+                            tf.scale = scale;
+                            full_changed = true;
+                        }
+                    }
+                }
+                if full_changed {
+                    full.rebuild_worlds();
+                }
+            }
+            self.mmdd_face_bone_dirty = true;
+        }
+    }
+
+    /// Evaluates desired FBS + asymmetric wink + compound mouth/brow morph weights (in `0..=100` percent)
+    /// for a head part from an `OkAnim` face curve map, and returns deformed part vertices.
+    pub fn evaluate_part_face_vertices(
+        &self,
+        part_index: usize,
+        curves: &std::collections::BTreeMap<String, f32>,
+    ) -> Option<Vec<[f32; 3]>> {
+        let part = self.parts.get(part_index)?;
+        if part.positions.is_empty() {
+            return None;
+        }
+        let n_morphs = part.blend_shapes.len();
+        let mut desired: Vec<Option<f32>> = vec![None; n_morphs];
+        let morph_names: Vec<String> = part
+            .blend_shapes
+            .iter()
+            .map(|(n, _)| n.to_string_lossy().to_ascii_lowercase())
+            .collect();
+        let find_suffix = |suf: &str| -> Option<usize> {
+            morph_names.iter().position(|n| n.ends_with(suf))
+        };
+
+        // 1. Eyebrow controller
+        if !part.eyebrow_patterns.is_empty() {
+            for &(c, o) in &part.eyebrow_patterns {
+                for idx in [c, o] {
+                    if idx >= 0 {
+                        if let Some(slot) = desired.get_mut(idx as usize) {
+                            *slot = Some(0.0);
+                        }
+                    }
+                }
+            }
+            let ptn = curves
+                .get("face.brow_pattern")
+                .map_or(0, |v| v.round() as isize)
+                .clamp(0, part.eyebrow_patterns.len() as isize - 1) as usize;
+            let w_brow = curves.get("face.brow_weight").copied().unwrap_or(1.0).clamp(0.0, 1.0);
+            let open_pct = crate::face_shapes::fbs_integer_open_percent(part.face_default_rates[1]) as f32;
+            let mut add_brow = |p: usize, blend: f32| {
+                if blend <= 0.0 {
+                    return;
+                }
+                if let Some(&(c, o)) = part.eyebrow_patterns.get(p) {
+                    if c >= 0 {
+                        if let Some(Some(w)) = desired.get_mut(c as usize) {
+                            *w += blend * (100.0 - open_pct);
+                        }
+                    }
+                    if o >= 0 {
+                        if let Some(Some(w)) = desired.get_mut(o as usize) {
+                            *w += blend * open_pct;
+                        }
+                    }
+                }
+            };
+            if ptn > 0 && w_brow < 0.999 {
+                add_brow(0, 1.0 - w_brow);
+                add_brow(ptn, w_brow);
+            } else {
+                add_brow(ptn, 1.0);
+            }
+        }
+
+        // 2. Eyes controller (independent L/R openness + normal vs happy wink + smooth expr blend)
+        let wink_l_norm = find_suffix("_winkl_op").or_else(|| {
+            part.eye_patterns
+                .get(5)
+                .and_then(|&(_, o)| (o >= 0).then_some(o as usize))
+        });
+        let wink_r_norm = find_suffix("_winkr_op").or_else(|| {
+            part.eye_patterns
+                .get(6)
+                .and_then(|&(_, o)| (o >= 0).then_some(o as usize))
+        });
+        let wink_l_happy = find_suffix("_gyul_op").or(wink_l_norm);
+        let wink_r_happy = find_suffix("_gyur_op").or(wink_r_norm);
+        let happy_both_cl = find_suffix("_egao_cl").or_else(|| {
+            part.eye_patterns
+                .get(3)
+                .and_then(|&(c, _)| (c >= 0).then_some(c as usize))
+        });
+
+        if !part.eye_patterns.is_empty() || wink_l_norm.is_some() || wink_r_norm.is_some() {
+            for &(c, o) in &part.eye_patterns {
+                for idx in [c, o] {
+                    if idx >= 0 {
+                        if let Some(slot) = desired.get_mut(idx as usize) {
+                            *slot = Some(0.0);
+                        }
+                    }
+                }
+            }
+            for aux in [wink_l_norm, wink_r_norm, wink_l_happy, wink_r_happy, happy_both_cl]
+                .into_iter()
+                .flatten()
+            {
+                if let Some(slot) = desired.get_mut(aux) {
+                    *slot = Some(0.0);
+                }
+            }
+
+            let has_asym = curves.contains_key("face.eye_open_l") || curves.contains_key("face.eye_open_r");
+            let ptn = curves
+                .get("face.eye_pattern")
+                .map_or(0, |v| v.round() as isize)
+                .clamp(0, part.eye_patterns.len().saturating_sub(1) as isize) as usize;
+            if has_asym {
+                let open_l = curves.get("face.eye_open_l").copied().unwrap_or(1.0).clamp(0.0, 1.0);
+                let open_r = curves.get("face.eye_open_r").copied().unwrap_or(1.0).clamp(0.0, 1.0);
+                let happy_l = curves
+                    .get("face.eye_wink_l_happy")
+                    .copied()
+                    .unwrap_or(0.0)
+                    .clamp(0.0, 1.0);
+                let happy_r = curves
+                    .get("face.eye_wink_r_happy")
+                    .copied()
+                    .unwrap_or(0.0)
+                    .clamp(0.0, 1.0);
+                let expr_w = curves
+                    .get("face.eye_expr_weight")
+                    .copied()
+                    .unwrap_or(if ptn > 0 { 1.0 } else { 0.0 })
+                    .clamp(0.0, 1.0);
+                let wide_w = curves
+                    .get("face.eye_wide")
+                    .copied()
+                    .unwrap_or(0.0)
+                    .clamp(0.0, 1.0);
+
+                let c_l = 1.0 - open_l;
+                let c_r = 1.0 - open_r;
+                let m = c_l.min(c_r);
+                let d_l = c_l - m;
+                let d_r = c_r - m;
+                let o_both = (1.0 - c_l.max(c_r)).max(0.0);
+
+                let base_rate = part.face_default_rates[0] + (1.0 - part.face_default_rates[0]) * wide_w;
+                let base_open_pct = crate::face_shapes::fbs_integer_open_percent(base_rate) as f32;
+                let mut add_eye_ptn = |p: usize, open_pct: f32, weight: f32| {
+                    if weight <= 0.0 {
+                        return;
+                    }
+                    if let Some(&(c, o)) = part.eye_patterns.get(p) {
+                        if c >= 0 {
+                            if let Some(Some(w)) = desired.get_mut(c as usize) {
+                                *w += weight * (100.0 - open_pct);
+                            }
+                        }
+                        if o >= 0 {
+                            if let Some(Some(w)) = desired.get_mut(o as usize) {
+                                *w += weight * open_pct;
+                            }
+                        }
+                    }
+                };
+                if ptn > 0 && expr_w > 1e-4 {
+                    add_eye_ptn(0, base_open_pct, o_both * (1.0 - expr_w));
+                    add_eye_ptn(ptn, base_open_pct, o_both * expr_w);
+                } else {
+                    add_eye_ptn(0, base_open_pct, o_both);
+                }
+                let def_cl = part
+                    .eye_patterns
+                    .first()
+                    .and_then(|&(c, _)| (c >= 0).then_some(c as usize));
+                if d_l > 1e-5 {
+                    if let Some(idx) = wink_l_norm {
+                        if let Some(Some(w)) = desired.get_mut(idx) {
+                            *w += d_l * (1.0 - happy_l) * base_open_pct;
+                        }
+                    }
+                    if let Some(idx) = wink_l_happy {
+                        if let Some(Some(w)) = desired.get_mut(idx) {
+                            *w += d_l * happy_l * base_open_pct;
+                        }
+                    }
+                    if let Some(idx) = def_cl {
+                        if let Some(Some(w)) = desired.get_mut(idx) {
+                            *w += d_l * (100.0 - base_open_pct);
+                        }
+                    }
+                }
+                if d_r > 1e-5 {
+                    if let Some(idx) = wink_r_norm {
+                        if let Some(Some(w)) = desired.get_mut(idx) {
+                            *w += d_r * (1.0 - happy_r) * base_open_pct;
+                        }
+                    }
+                    if let Some(idx) = wink_r_happy {
+                        if let Some(Some(w)) = desired.get_mut(idx) {
+                            *w += d_r * happy_r * base_open_pct;
+                        }
+                    }
+                    if let Some(idx) = def_cl {
+                        if let Some(Some(w)) = desired.get_mut(idx) {
+                            *w += d_r * (100.0 - base_open_pct);
+                        }
+                    }
+                }
+                if m > 1e-5 {
+                    let happy_both = happy_l.min(happy_r);
+                    let base_cl = part
+                        .eye_patterns
+                        .get(ptn)
+                        .or_else(|| part.eye_patterns.first())
+                        .and_then(|&(c, _)| (c >= 0).then_some(c as usize));
+                    if let Some(idx) = base_cl {
+                        if let Some(Some(w)) = desired.get_mut(idx) {
+                            *w += m * (1.0 - happy_both) * 100.0;
+                        }
+                    }
+                    if let Some(idx) = happy_both_cl.or(base_cl) {
+                        if let Some(Some(w)) = desired.get_mut(idx) {
+                            *w += m * happy_both * 100.0;
+                        }
+                    }
+                }
+            } else if let Some(&(c, o)) = part.eye_patterns.get(ptn) {
+                let open = curves
+                    .get("face.eye_open")
+                    .copied()
+                    .unwrap_or(part.face_default_rates[0]);
+                let open_pct = crate::face_shapes::fbs_integer_open_percent(open) as f32;
+                if c >= 0 {
+                    if let Some(Some(w)) = desired.get_mut(c as usize) {
+                        *w += 100.0 - open_pct;
+                    }
+                }
+                if o >= 0 {
+                    if let Some(Some(w)) = desired.get_mut(o as usize) {
+                        *w += open_pct;
+                    }
+                }
+            }
+        }
+
+        // 3. Mouth controller + compound corner smile/frown
+        let corner_up_idx = part
+            .mouth_patterns
+            .get(2)
+            .and_then(|&(c, _)| (c >= 0).then_some(c as usize))
+            .or_else(|| find_suffix("_uresi_cl"));
+        let corner_down_idx = part
+            .mouth_patterns
+            .get(8)
+            .and_then(|&(c, _)| (c >= 0).then_some(c as usize))
+            .or_else(|| find_suffix("_ikari_cl"));
+
+        if !part.mouth_patterns.is_empty() {
+            for &(c, o) in &part.mouth_patterns {
+                for idx in [c, o] {
+                    if idx >= 0 {
+                        if let Some(slot) = desired.get_mut(idx as usize) {
+                            *slot = Some(0.0);
+                        }
+                    }
+                }
+            }
+            for aux in [corner_up_idx, corner_down_idx].into_iter().flatten() {
+                if let Some(slot) = desired.get_mut(aux) {
+                    *slot = Some(0.0);
+                }
+            }
+            let ptn = curves
+                .get("face.mouth_pattern")
+                .map_or(0, |v| v.round() as isize)
+                .clamp(0, part.mouth_patterns.len() as isize - 1) as usize;
+            let open = curves.get("face.mouth_open").copied().unwrap_or(0.0).clamp(0.0, 1.0);
+            let mouth_w = curves.get("face.mouth_weight").copied().unwrap_or(1.0).clamp(0.0, 1.0);
+            let corner_up = curves
+                .get("face.mouth_corner_up")
+                .copied()
+                .unwrap_or(0.0)
+                .clamp(0.0, 1.0);
+            let corner_down = curves
+                .get("face.mouth_corner_down")
+                .copied()
+                .unwrap_or(0.0)
+                .clamp(0.0, 1.0);
+            let corner_sum = (corner_up + corner_down).min(1.0);
+            let close_scale = 1.0 - corner_sum * (1.0 - open);
+            let open_pct = crate::face_shapes::fbs_integer_open_percent(open) as f32;
+
+            let mut add_mouth = |p: usize, blend: f32, p_open: f32| {
+                if blend <= 0.0 {
+                    return;
+                }
+                if let Some(&(c, o)) = part.mouth_patterns.get(p) {
+                    if c >= 0 {
+                        if let Some(Some(w)) = desired.get_mut(c as usize) {
+                            *w += blend * (100.0 - p_open) * close_scale;
+                        }
+                    }
+                    if o >= 0 {
+                        if let Some(Some(w)) = desired.get_mut(o as usize) {
+                            *w += blend * p_open;
+                        }
+                    }
+                }
+            };
+            if ptn > 0 && mouth_w < 0.999 {
+                add_mouth(0, 1.0 - mouth_w, 0.0);
+                add_mouth(ptn, mouth_w, open_pct);
+            } else {
+                add_mouth(ptn, 1.0, open_pct);
+            }
+            let damp = 1.0 - 0.35 * open;
+            if corner_up > 1e-4 {
+                if let Some(idx) = corner_up_idx {
+                    if let Some(Some(w)) = desired.get_mut(idx) {
+                        *w += corner_up * damp * 100.0;
+                    }
+                }
+            }
+            if corner_down > 1e-4 {
+                if let Some(idx) = corner_down_idx {
+                    if let Some(Some(w)) = desired.get_mut(idx) {
+                        *w += corner_down * damp * 100.0;
+                    }
+                }
+            }
+        }
+
+        let mut verts = part.positions.clone();
+        for (m_idx, ((_, deltas), wanted)) in part.blend_shapes.iter().zip(desired.iter()).enumerate() {
+            let Some(wanted_pct) = *wanted else { continue };
+            let base_pct = part.face_baseline_weights.get(m_idx).copied().unwrap_or(0.0);
+            let w = (wanted_pct - base_pct) / 100.0;
+            if w.abs() < 1e-6 {
+                continue;
+            }
+            for &(v_idx, d) in deltas {
+                if let Some(pos) = verts.get_mut(v_idx as usize) {
+                    pos[0] += d[0] * w;
+                    pos[1] += d[1] * w;
+                    pos[2] += d[2] * w;
+                }
+            }
+        }
+        Some(verts)
+    }
+
     pub(crate) fn replace_accessory_parts(&mut self,outfit:usize,slot:usize,
         retained:&[Option<usize>],added:Vec<SessionPart>,exports:crate::skel_export::PartExports)
         ->Result<(),String> {
@@ -1524,7 +2011,7 @@ impl OkSession {
     }
     fn update_clothes_dynamics(&mut self, dt: f32) {
         if std::env::var("OK_NODB").is_ok() || std::env::var("OK_NO_CLOTH_DYNAMICS").ok().as_deref()==Some("1") || self.clothes_dynamics.is_empty() { return; }
-        let studio = !self.game_root.as_os_str().is_empty() && crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode);
+        let studio = crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode);
         let flags = self.collider_settings.resolve(studio, self.collider_overrides);
         let group = self as *const Self as u64;
         let physx = self.physx_secondary;
@@ -1582,7 +2069,7 @@ impl OkSession {
     }
     fn update_body_dynamics(&mut self, dt: f32) {
         if std::env::var("OK_NODB").is_ok() { return; }
-        let studio = !self.game_root.as_os_str().is_empty() && crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode);
+        let studio = crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode);
         let flags = self.collider_settings.resolve(studio, self.collider_overrides);
         if self.body_dynamic_runtime.as_ref().is_some_and(|r| r.collider_flags() != Some(flags)) {
             if let (Some(runtime),Some(shaped))=(&mut self.body_dynamic_runtime,&self.body_shaped) {
@@ -1643,7 +2130,7 @@ impl OkSession {
     fn update_dynamic_accessories_filtered(&mut self,dt:f32,palette_only:bool,parallel:bool,observer:Option<crate::ffi::PrivateSkinObserver>,excluded:&[usize]) {
         let t_prepare=std::time::Instant::now();
         let policy=AccessoryFramePolicy::read();
-        let studio = !self.game_root.as_os_str().is_empty() && crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode);
+        let studio = crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode);
         let flags = self.collider_settings.resolve(studio, self.collider_overrides);
         let group = self as *const Self as u64;
         let physx = self.physx_secondary;
@@ -1876,13 +2363,16 @@ impl OkSession {
             if locals { sk.rebuild_worlds(); }
             // OCIChar.ActiveKinematicMode disables Preparation.pvCopy for all
             // limbs while FK is enabled, even when only fingers are selected.
-            if !self.game_root.as_os_str().is_empty() && crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode) {
-                if let Some(config)=&self.pv_config {config.apply(sk,self.pv_mask,self.pv_fk || !self.user_fk.is_empty());}
-                crate::pose::apply_expression_bone(sk);
-            }
-            let names: Vec<String> = self.abm.iter().map(|b| b.name.clone()).collect();
-            let base = crate::pose::capture_baseline(sk, &names);
-            let saved_cf_j: Vec<(i64, crate::finalik::Quat)> = if self.anim_scene_mode == 4 && self.user_fk.is_empty() { sk.tfs.iter().filter(|(_, tf)| tf.name.starts_with("cf_j_")).map(|(&id, tf)| (id, tf.rot)).collect() } else { Vec::new() }; crate::pose::apply_abm(sk, &self.abm, 0, &base); if !saved_cf_j.is_empty() { for (id, rot) in saved_cf_j { if let Some(tf) = sk.tfs.get_mut(&id) { tf.rot = rot; } } sk.rebuild_worlds(); }
+            let run_expr = crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode);
+            finish_deform_and_abm_on_body(
+                sk,
+                run_expr,
+                self.pv_fk || !self.user_fk.is_empty(),
+                &self.pv_config,
+                self.pv_mask,
+                &self.abm,
+                self.mmdd_world_lock && self.user_fk.is_empty(),
+            );
             // Studio IK after the bone modifiers: a target is where the limb ends up.
             apply_studio_ik(sk, &mut self.studio_ik_solver, &self.studio_ik, &self.studio_ik_rotations, &self.studio_ik_weights);
             if !self.game_root.as_os_str().is_empty() && std::env::var("OK_FINALIK").is_ok() {
@@ -2028,6 +2518,7 @@ impl OkSession {
     }
     pub(crate) fn sample_paired_frame(&mut self, t: f32) {
         if self.game_root.as_os_str().is_empty() { return; }
+        self.mmdd_world_lock = false;
         self.anim_time = t.max(0.0);
         if self.shaped_baselines_missing() {
             let body = self.shape_body.clone();
@@ -2064,8 +2555,12 @@ impl OkSession {
     /// OK animation player: the character's own finishing pass on the written pose, in the animation's source scene
     /// (limb size corrections, expression bones), then ABMX, interaction and hair/cloth physics.
     pub(crate) fn ok_finish_frame(&mut self, dt: f32, scene: i32) {
+        self.ok_finish_frame_ex(dt, scene, false);
+    }
+    pub(crate) fn ok_finish_frame_ex(&mut self, dt: f32, scene: i32, mmdd_world_lock: bool) {
         let saved = self.anim_scene_mode;
         let saved_pv_fk = self.pv_fk;
+        self.mmdd_world_lock = mmdd_world_lock;
         self.anim_scene_mode = if (1..=4).contains(&scene) { scene } else if saved != 0 { saved } else { 2 };
         // OkAnim tracks only drive `cf_j_*` bones (not `cf_pv_*`), so Studio PVCopy must not
         // overwrite the solved `cf_j_hand_*` / `cf_j_leg03_*` pose with un-animated T-pose `cf_pv_*` helpers.
@@ -2105,6 +2600,37 @@ impl OkSession {
         if let Some(head)=self.head_skel.as_mut() {
             let baseline=crate::pose::capture_abm_baseline(head,&self.abm);
             crate::pose::apply_abm(head,&self.abm,0,&baseline);
+        }
+        if self.mmdd_face_bone_dirty {
+            self.mmdd_face_bone_dirty = false;
+            let mut reset_tfs: Vec<(&'static str, [f32; 3], [f32; 4], [f32; 3])> = Vec::new();
+            if let Some(head) = self.head_skel.as_ref() {
+                for tf in head.tfs.values() {
+                    if tf.name.eq_ignore_ascii_case("cf_J_Mayu_ty") {
+                        reset_tfs.push(("cf_J_Mayu_ty", tf.pos, tf.rot, tf.scale));
+                    } else if tf.name.eq_ignore_ascii_case("cf_J_MouthBase_ty") {
+                        reset_tfs.push(("cf_J_MouthBase_ty", tf.pos, tf.rot, tf.scale));
+                    }
+                }
+            }
+            if !reset_tfs.is_empty() {
+                if let Some(full) = self.head_full_posed.as_mut() {
+                    let mut full_changed = false;
+                    for tf in full.tfs.values_mut() {
+                        for &(bname, pos, rot, scale) in &reset_tfs {
+                            if tf.name.eq_ignore_ascii_case(bname) {
+                                tf.pos = pos;
+                                tf.rot = rot;
+                                tf.scale = scale;
+                                full_changed = true;
+                            }
+                        }
+                    }
+                    if full_changed {
+                        full.rebuild_worlds();
+                    }
+                }
+            }
         }
     }
 
@@ -2156,14 +2682,20 @@ impl OkSession {
             if locals { sk.rebuild_worlds(); }
             prof::add(13, t);
             let t = std::time::Instant::now();
-            if !self.game_root.as_os_str().is_empty() && crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode) {
-                if let Some(config)=&self.pv_config {config.apply(sk,self.pv_mask,self.pv_fk || !self.user_fk.is_empty());}
+            let run_expr = crate::anim::clip_expression_bone_mode(&self.game_root, &self.anim_clip, self.anim_scene_mode);
+            let lock_mmdd = self.mmdd_world_lock && self.user_fk.is_empty();
+            let locked = lock_mmdd.then(|| capture_mmdd_cf_j_rel_world_rots(sk));
+            if run_expr {
+                if let Some(config) = &self.pv_config { config.apply(sk, self.pv_mask, self.pv_fk || !self.user_fk.is_empty()); }
                 crate::pose::apply_expression_bone(sk);
             }
             prof::add(14, t);
             let t = std::time::Instant::now();
-            let base = crate::pose::capture_abm_baseline(sk,&self.abm);
-            let saved_cf_j: Vec<(i64, crate::finalik::Quat)> = if self.anim_scene_mode == 4 && self.user_fk.is_empty() { sk.tfs.iter().filter(|(_, tf)| tf.name.starts_with("cf_j_")).map(|(&id, tf)| (id, tf.rot)).collect() } else { Vec::new() }; crate::pose::apply_abm(sk, &self.abm, 0, &base); if !saved_cf_j.is_empty() { for (id, rot) in saved_cf_j { if let Some(tf) = sk.tfs.get_mut(&id) { tf.rot = rot; } } sk.rebuild_worlds(); }
+            let base = crate::pose::capture_abm_baseline(sk, &self.abm);
+            crate::pose::apply_abm(sk, &self.abm, 0, &base);
+            if let Some((root_id, root_rot, saved)) = locked {
+                apply_mmdd_world_lock_post_deform(sk, root_id, root_rot, &saved, run_expr, &base, &self.abm);
+            }
             prof::add(15, t);
             let t = std::time::Instant::now();
             // Studio IK after the bone modifiers: a target is where the limb ends up.
@@ -2245,6 +2777,7 @@ impl OkSession {
                 !q2.is_finite() || q2 < 1e-12 || p.scale.iter().any(|v|v.abs()<1e-8) { return false; }
             resolved.push((id,p,q2.sqrt()));
         }
+        self.mmdd_world_lock = false;
         self.anim_time = t.max(0.0);
         self.reset_animator_pose();
         let body = self.body_skel.as_mut().unwrap();
@@ -3059,6 +3592,152 @@ impl OkSession {
     }
 }
 
+fn is_mmdd_world_locked_cf_j(name: &str) -> bool {
+    name.starts_with("cf_j_")
+        && name != "cf_j_root"
+        && !name.starts_with("cf_j_bust")
+        && !name.starts_with("cf_j_bnip")
+        && !name.starts_with("cf_j_siri")
+        && !name.starts_with("cf_j_kokan")
+        && !name.starts_with("cf_j_ana")
+        && !name.starts_with("cf_j_dan")
+        && !name.starts_with("cf_j_tama")
+}
+
+fn capture_mmdd_cf_j_rel_world_rots(
+    sk: &Skeleton,
+) -> (Option<i64>, crate::finalik::Quat, Vec<(i64, crate::finalik::Quat)>) {
+    let root_id = crate::pose::animator_root_id(sk);
+    let root_rot = root_id
+        .map(|rid| crate::pose::world_rotation_of(rid, &sk.tfs))
+        .unwrap_or(crate::finalik::IDENTITY);
+    let inv_root = crate::finalik::qinv(root_rot);
+    let allowed: Option<std::collections::HashSet<i64>> =
+        root_id.map(|rid| crate::pose::subtree_ids_pub(rid, &sk.tfs).into_iter().collect());
+    let depth_of = |mut id: i64| -> usize {
+        let mut d = 0usize;
+        while let Some(p) = sk.tfs.get(&id).and_then(|t| t.parent) {
+            if p == 0 || p == id || !sk.tfs.contains_key(&p) {
+                break;
+            }
+            id = p;
+            d += 1;
+            if d > 128 {
+                break;
+            }
+        }
+        d
+    };
+    let mut items: Vec<(usize, i64, crate::finalik::Quat)> = sk
+        .tfs
+        .iter()
+        .filter(|(&id, tf)| {
+            allowed.as_ref().map_or(true, |set| set.contains(&id))
+                && Some(id) != root_id
+                && is_mmdd_world_locked_cf_j(&tf.name)
+        })
+        .map(|(&id, _)| {
+            let w = crate::pose::world_rotation_of(id, &sk.tfs);
+            let rel = crate::finalik::qnorm(crate::finalik::qmul(inv_root, w));
+            (depth_of(id), id, rel)
+        })
+        .collect();
+    items.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    let saved = items.into_iter().map(|(_, id, rel)| (id, rel)).collect();
+    (root_id, root_rot, saved)
+}
+
+fn enforce_mmdd_cf_j_rel_world_rots(
+    sk: &mut Skeleton,
+    root_id: Option<i64>,
+    fallback_root_rot: crate::finalik::Quat,
+    saved: &[(i64, crate::finalik::Quat)],
+) {
+    let cur_root_rot = root_id
+        .map(|rid| crate::pose::world_rotation_of(rid, &sk.tfs))
+        .unwrap_or(fallback_root_rot);
+    for &(id, rel_q) in saved {
+        let target_w = crate::finalik::qmul(cur_root_rot, rel_q);
+        let parent_w = sk
+            .tfs
+            .get(&id)
+            .and_then(|t| t.parent)
+            .filter(|&p| p != 0 && p != id && sk.tfs.contains_key(&p))
+            .map(|p| crate::pose::world_rotation_of(p, &sk.tfs))
+            .unwrap_or(crate::finalik::IDENTITY);
+        if let Some(tf) = sk.tfs.get_mut(&id) {
+            tf.rot = crate::finalik::qnorm(crate::finalik::qmul(crate::finalik::qinv(parent_w), target_w));
+        }
+    }
+}
+
+fn apply_mmdd_world_lock_post_deform(
+    sk: &mut Skeleton,
+    root_id: Option<i64>,
+    root_rot: crate::finalik::Quat,
+    saved: &[(i64, crate::finalik::Quat)],
+    run_expr: bool,
+    pre_abm_base: &HashMap<i64, ([f32; 3], [f32; 4], [f32; 3])>,
+    abm: &[crate::abmx::AbmBone],
+) {
+    if saved.is_empty() {
+        return;
+    }
+    enforce_mmdd_cf_j_rel_world_rots(sk, root_id, root_rot, saved);
+    if run_expr {
+        for (&id, &(bp, br, bs)) in pre_abm_base {
+            if sk
+                .tfs
+                .get(&id)
+                .is_some_and(|tf| crate::pose::is_leaf_corrective_expression_bone(&tf.name))
+            {
+                if let Some(tf) = sk.tfs.get_mut(&id) {
+                    tf.pos = bp;
+                    tf.rot = br;
+                    tf.scale = bs;
+                }
+            }
+        }
+        crate::pose::apply_expression_bone_leaf_twists(sk);
+        if abm
+            .iter()
+            .any(|b| crate::pose::is_leaf_corrective_expression_bone(&b.name))
+        {
+            let leaf_abm: Vec<crate::abmx::AbmBone> = abm
+                .iter()
+                .filter(|b| crate::pose::is_leaf_corrective_expression_bone(&b.name))
+                .cloned()
+                .collect();
+            let leaf_base = crate::pose::capture_abm_baseline(sk, &leaf_abm);
+            crate::pose::apply_abm(sk, &leaf_abm, 0, &leaf_base);
+        }
+    }
+    sk.rebuild_worlds();
+}
+
+fn finish_deform_and_abm_on_body(
+    sk: &mut Skeleton,
+    run_expr: bool,
+    pv_fk: bool,
+    pv_config: &Option<crate::pv::Config>,
+    pv_mask: u8,
+    abm: &[crate::abmx::AbmBone],
+    lock_mmdd_cf_j: bool,
+) {
+    let locked = lock_mmdd_cf_j.then(|| capture_mmdd_cf_j_rel_world_rots(sk));
+    if run_expr {
+        if let Some(config) = pv_config {
+            config.apply(sk, pv_mask, pv_fk);
+        }
+        crate::pose::apply_expression_bone(sk);
+    }
+    let base = crate::pose::capture_abm_baseline(sk, abm);
+    crate::pose::apply_abm(sk, abm, 0, &base);
+    if let Some((root_id, root_rot, saved)) = locked {
+        apply_mmdd_world_lock_post_deform(sk, root_id, root_rot, &saved, run_expr, &base, abm);
+    }
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 struct PartBlob {
     runtime_textures: std::collections::BTreeMap<String, [i32; 5]>,
@@ -3361,6 +4040,10 @@ impl SessionBlob {
             anim_parameters: HashMap::new(),
             anim_clock:Default::default(),anim_crossfade:None,anim_layer_crossfades:Default::default(),
             anim_scene_mode: 0,
+            mmdd_world_lock: false,
+            mmdd_face_bone_dirty: false,
+            active_shoe_meta: None,
+            face_runtime: Default::default(),
             body_shaped: self.body_shaped,
             shape_reference_scratch: None,
             head_shaped: self.head_shaped,

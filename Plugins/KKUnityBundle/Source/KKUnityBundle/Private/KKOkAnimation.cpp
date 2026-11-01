@@ -42,6 +42,16 @@ bool FOkAnimBridge::FromClip(FOkSession& Session, const FString& Key, float Fps,
 	return OkAnimReadBytes([&](uint8* Buf, int32 Cap) { return ok_okanim_from_clip(Session.Handle, K.Get(), Fps, Buf, Cap); }, Out);
 }
 
+bool FOkAnimBridge::FromVmd(const FOkSession* Session, const FString& VmdFile, const FString& ParamsJson, TArray<uint8>& Out)
+{
+	const FTCHARToUTF8 V(*VmdFile);
+	const FTCHARToUTF8 P(*ParamsJson);
+	const OkSession* Handle = Session ? Session->Handle : nullptr;
+	return OkAnimReadBytes([&](uint8* Buf, int32 Cap) {
+		return ok_okanim_from_vmd(Handle, V.Get(), ParamsJson.IsEmpty() ? nullptr : P.Get(), Buf, Cap);
+	}, Out);
+}
+
 bool FOkAnimBridge::FromLocals(const FString& HeaderJson, const TArray<float>& Rotations, const TArray<float>& Hips, TArray<uint8>& Out)
 {
 	const FTCHARToUTF8 H(*HeaderJson);
@@ -321,7 +331,15 @@ void FOkAnimPlayer::ApplyFaceCurves(int32 Role, float T, AKKPreviewActor& Actor)
 
 void FOkAnimPlayer::ApplyFaceCurveValues(const TMap<FString, float>& C, AKKPreviewActor& Actor)
 {
-	if (C.IsEmpty()) return;
+	if (C.IsEmpty())
+	{
+		if (Actor.bAsymmetricEyes || Actor.BlushRate >= 0.f || FMath::Abs(Actor.IrisSmallRate) > 1.e-4f
+			|| Actor.BrowWeight < 0.999f || Actor.MouthWeight < 0.999f || Actor.MouthCornerUp > 1.e-4f || Actor.MouthCornerDown > 1.e-4f)
+		{
+			Actor.ResetTransientFaceOverrides(true);
+		}
+		return;
+	}
 	Actor.BeginFaceDisplayUpdate();
 	ON_SCOPE_EXIT { Actor.EndFaceDisplayUpdate(); };
 	if (const float* V = C.Find(TEXT("face.mouth_pattern")))
@@ -331,18 +349,89 @@ void FOkAnimPlayer::ApplyFaceCurveValues(const TMap<FString, float>& C, AKKPrevi
 	}
 	// An unchanged opening does not rebuild the mouth morphs.
 	if (const float* V = C.Find(TEXT("face.mouth_open"))) if (!FMath::IsNearlyEqual(FMath::Clamp(*V, 0.f, 1.f), Actor.MouthOpen01, 1.e-4f)) Actor.SetMouthOpen(*V);
+
 	const float* EyePattern = C.Find(TEXT("face.eye_pattern"));
-	const float* EyeOpen = C.Find(TEXT("face.eye_open"));
-	if (EyePattern || EyeOpen)
+	const float* EyeOpenL = C.Find(TEXT("face.eye_open_l"));
+	const float* EyeOpenR = C.Find(TEXT("face.eye_open_r"));
+	if (EyeOpenL || EyeOpenR)
 	{
-		const int32 Pattern = EyePattern ? FMath::RoundToInt(*EyePattern) : Actor.FacePattern[0];
-		const float Open = EyeOpen ? *EyeOpen : Actor.FaceOpen01[0];
-		if (Pattern != Actor.FacePattern[0] || !FMath::IsNearlyEqual(Open, Actor.FaceOpen01[0], 1.e-3f)) Actor.SetFaceControl(1, Pattern, Open, false);
+		if (EyePattern)
+		{
+			const int32 Pattern = FMath::RoundToInt(*EyePattern);
+			if (Pattern != Actor.FacePattern[0]) Actor.SetFacePattern(1, Pattern, false);
+		}
+		const float OL = FMath::Clamp(EyeOpenL ? *EyeOpenL : 1.f, 0.f, 1.f);
+		const float OR = FMath::Clamp(EyeOpenR ? *EyeOpenR : 1.f, 0.f, 1.f);
+		const float HappyL = FMath::Clamp(C.FindRef(TEXT("face.eye_wink_l_happy")), 0.f, 1.f);
+		const float HappyR = FMath::Clamp(C.FindRef(TEXT("face.eye_wink_r_happy")), 0.f, 1.f);
+		const float* ExprPtr = C.Find(TEXT("face.eye_expr_weight"));
+		const float ExprW = FMath::Clamp(ExprPtr ? *ExprPtr : (Actor.FacePattern[0] > 0 ? 1.f : 0.f), 0.f, 1.f);
+		const float WideW = FMath::Clamp(C.FindRef(TEXT("face.eye_wide")), 0.f, 1.f);
+		Actor.SetEyeOpenAsymmetric(OL, OR, HappyL, HappyR, ExprW, WideW);
 	}
+	else
+	{
+		if (Actor.bAsymmetricEyes) Actor.ClearAsymmetricEyes();
+		const float* EyeOpen = C.Find(TEXT("face.eye_open"));
+		if (EyePattern || EyeOpen)
+		{
+			const int32 Pattern = EyePattern ? FMath::RoundToInt(*EyePattern) : Actor.FacePattern[0];
+			const float Open = EyeOpen ? *EyeOpen : Actor.FaceOpen01[0];
+			if (Pattern != Actor.FacePattern[0] || !FMath::IsNearlyEqual(Open, Actor.FaceOpen01[0], 1.e-3f)) Actor.SetFaceControl(1, Pattern, Open, false);
+		}
+	}
+
 	if (const float* V = C.Find(TEXT("face.brow_pattern")))
 	{
 		const int32 Pattern = FMath::RoundToInt(*V);
-		if (Pattern != Actor.FacePattern[1]) Actor.SetFacePattern(2, Pattern, false); } if (!Actor.bEyeLookTracking) { const float *GL = C.Find(TEXT("face.eye_gaze_lh")), *GR = C.Find(TEXT("face.eye_gaze_rh")), *GV = C.Find(TEXT("face.eye_gaze_v")); if (GL || GR || GV) { const float LH = FMath::Clamp(GL ? *GL : Actor.EyeGaze[0], -1.f, 1.f), RH = FMath::Clamp(GR ? *GR : Actor.EyeGaze[1], -1.f, 1.f), V = FMath::Clamp(GV ? *GV : Actor.EyeGaze[2], -1.f, 1.f); if (!FMath::IsNearlyEqual(LH, Actor.EyeGaze[0], 1.e-3f) || !FMath::IsNearlyEqual(RH, Actor.EyeGaze[1], 1.e-3f) || !FMath::IsNearlyEqual(V, Actor.EyeGaze[2], 1.e-3f)) Actor.SetEyeGaze(LH, RH, V); }
+		if (Pattern != Actor.FacePattern[1]) Actor.SetFacePattern(2, Pattern, false);
+	}
+
+	const float* BrowWPtr = C.Find(TEXT("face.brow_weight"));
+	const float* MouthWPtr = C.Find(TEXT("face.mouth_weight"));
+	const float* CornerUpPtr = C.Find(TEXT("face.mouth_corner_up"));
+	const float* CornerDownPtr = C.Find(TEXT("face.mouth_corner_down"));
+	if (BrowWPtr || MouthWPtr || CornerUpPtr || CornerDownPtr)
+	{
+		const float BW = BrowWPtr ? FMath::Clamp(*BrowWPtr, 0.f, 1.f) : 1.f;
+		const float MW = MouthWPtr ? FMath::Clamp(*MouthWPtr, 0.f, 1.f) : 1.f;
+		const float CUp = CornerUpPtr ? FMath::Clamp(*CornerUpPtr, 0.f, 1.f) : 0.f;
+		const float CDown = CornerDownPtr ? FMath::Clamp(*CornerDownPtr, 0.f, 1.f) : 0.f;
+		Actor.SetCompoundFaceWeights(BW, MW, CUp, CDown);
+	}
+	else if (Actor.BrowWeight < 0.999f || Actor.MouthWeight < 0.999f || Actor.MouthCornerUp > 1.e-4f || Actor.MouthCornerDown > 1.e-4f)
+	{
+		Actor.SetCompoundFaceWeights(1.f, 1.f, 0.f, 0.f);
+	}
+
+	if (const float* Blush = C.Find(TEXT("face.blush")))
+	{
+		const float Clamped = FMath::Clamp(*Blush, 0.f, 1.f);
+		if (!FMath::IsNearlyEqual(Clamped, Actor.BlushRate, 1.e-3f)) Actor.SetBlush(Clamped);
+	}
+	else if (Actor.BlushRate >= 0.f)
+	{
+		Actor.SetBlush(Actor.DefaultBlushRate);
+		Actor.BlushRate = -1.f;
+	}
+	if (const float* Iris = C.Find(TEXT("face.iris_small")))
+	{
+		const float Clamped = FMath::Clamp(*Iris, -1.f, 1.f);
+		if (!FMath::IsNearlyEqual(Clamped, Actor.IrisSmallRate, 1.e-3f)) Actor.SetIrisSmall(Clamped);
+	}
+	else if (FMath::Abs(Actor.IrisSmallRate) > 1.e-4f)
+	{
+		Actor.SetIrisSmall(0.f);
+	}
+
+	if (!Actor.bEyeLookTracking)
+	{
+		const float *GL = C.Find(TEXT("face.eye_gaze_lh")), *GR = C.Find(TEXT("face.eye_gaze_rh")), *GV = C.Find(TEXT("face.eye_gaze_v"));
+		if (GL || GR || GV)
+		{
+			const float LH = FMath::Clamp(GL ? *GL : Actor.EyeGaze[0], -1.f, 1.f), RH = FMath::Clamp(GR ? *GR : Actor.EyeGaze[1], -1.f, 1.f), V = FMath::Clamp(GV ? *GV : Actor.EyeGaze[2], -1.f, 1.f);
+			if (!FMath::IsNearlyEqual(LH, Actor.EyeGaze[0], 1.e-3f) || !FMath::IsNearlyEqual(RH, Actor.EyeGaze[1], 1.e-3f) || !FMath::IsNearlyEqual(V, Actor.EyeGaze[2], 1.e-3f)) Actor.SetEyeGaze(LH, RH, V);
+		}
 	}
 }
 

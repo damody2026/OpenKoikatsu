@@ -17,6 +17,8 @@ public:
 	static FString LastError();
 	/** KK clip (as selectable on the session) -> OK animation bytes. */
 	static bool FromClip(FOkSession& Session, const FString& Key, float Fps, TArray<uint8>& Out);
+	/** MMD VMD motion solved on `Session`'s shaped character skeleton (`Session` may be null for standard KK rest) -> OK animation bytes. */
+	static bool FromVmd(const FOkSession* Session, const FString& VmdFile, const FString& ParamsJson, TArray<uint8>& Out);
 	/** Absolute locals of any named skeleton (header JSON: family, fps, frames, looping, scene, bones[name,parent,rest_local,rest_world,rest_pos], hips). */
 	static bool FromLocals(const FString& HeaderJson, const TArray<float>& Rotations, const TArray<float>& Hips, TArray<uint8>& Out);
 	static bool Info(const TArray<uint8>& Anim, FString& OutJson);

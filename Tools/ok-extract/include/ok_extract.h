@@ -468,6 +468,7 @@ void ok_set_secondary_tuning_source(void (*get)(float* weight, float* hardness))
 typedef struct OkAnimPlayer OkAnimPlayer;
 int32_t ok_okanim_last_error(char* out, int32_t cap);
 int32_t ok_okanim_from_clip(OkSession* s, const char* key, float fps, uint8_t* out, int32_t cap);
+int32_t ok_okanim_from_vmd(const OkSession* s, const char* vmd_path, const char* params_json, uint8_t* out, int32_t cap);
 int32_t ok_okanim_session_rest(OkSession* s, uint8_t* out, int32_t cap);
 int32_t ok_okanim_quality(const uint8_t* bytes, int32_t len, const char* header, uint8_t* out, int32_t cap);
 int32_t ok_okanim_set_posture(int32_t on);
@@ -542,6 +543,8 @@ int32_t ok_okmodel_texture_png(const char* library, const char* id_hex, const ch
 
 /* 1 when the session reads the game installation, 0 when it is self-contained (portable pack, OK base library). */
 int32_t ok_session_has_game_root(OkSession* s);
+int32_t ok_session_set_blush(OkSession* s, float rate);
+int32_t ok_session_set_iris_small(OkSession* s, float rate);
 
 #ifdef __cplusplus
 }
