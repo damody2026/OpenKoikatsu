@@ -4061,6 +4061,15 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **雙 slot 量測腳本卡住 26 分鐘，量完後停掉的舊腳本又把 slot 搶回去**（2026-10-29，E 組 OK 卡）：(1) 量測腳本拿到 slot 後，要等「我的編譯與驗收程序都結束」才開始量，但條件寫成「機器上沒有任何 cargo.exe／rustc.exe」，而別的工具常駐了好幾個 cargo.exe（MCP 伺服器），結果 05:59 拿到 slot 後一直空等到 06:25，c-conquest、e-galgame、c-street-city 都在排隊。(2) 我以為 TaskStop 停掉了先前兩個等待腳本，其實只停掉外殼，bash 腳本變成孤兒還在跑，連 01:36 的冷讀量測腳本也還在。06:48:33 量完釋放 slot，兩秒後其中一個孤兒又拿走兩個 slot，06:48:57 用 taskkill 全部結束才放出來。修正：等待條件只看自己啟動的程序（依路徑或 PID），不要看程式名稱；停掉背景腳本後，用命令列內容確認程序真的結束了（`Get-CimInstance Win32_Process` 找腳本名稱），還在就 `taskkill /T /F`。會去搶共用資源的腳本，停掉後一定要確認。
 - **C032 的根因：外部 CAB 索引在開卡 thread 上重建，讀遍整棵樹的 bundle 檔頭**（2026-10-29，E 組 OK 卡；接 10-28「C032 一度轉換失敗」那一條）：以 `OK_STRICT_TRACE=lyfe_mod` 在 12 個程序的批次裡重現並取得呼叫堆疊。C032 的配件材質引用外部 CAB，`references::external_source_path` 要用 `catalog()` 索引查出是哪個 bundle 含有它。這份索引原本靠 `base_v1\.ok_serialized_index_v1.bin` 這個磁碟快取；快取讀不到或不完整（12 個程序同時用非原子的 `fs::write` 改寫它，就可能讀到寫一半的檔案），就把 8,427 個來源的檔頭全部重讀。重讀發生在預取 helper 上：那個 thread 帶著卡包範圍，又沒有標記為掃描，所以每一筆都算成這張卡的缺口。只有 C032 中招，因為只有它的配件會走到外部 CAB 查詢；單獨轉時快取有效，所以重現不了。修正（references.rs `build_catalog`）：重建放進 `okstrict::scanning`；基礎庫模式不讀寫那個磁碟檔（走 `library_scan_load/save`，預設不用磁碟），一般遊戲目錄照舊用，但改成原子寫入；程序內共用上一份索引，沒變的來源不重讀。教訓：會讀遍整棵樹的查詢都要放在 `scanning` 裡，不能指望快取剛好有效；寫在共用目錄、會被多個程序同時讀寫的檔案，一律先寫暫存檔再改名。
 
+
+## E-250　讀卡器載入 3D 後水槍沒有打開，左鍵變成轉鏡頭（2026-10-25）
+
+- **症狀**：Yvonne 已在播 Demo：蹦跳。對畫面送 A＋左鍵，沒有白色水柱，人物角度一直轉。log `Saved/Logs/CardReader/yvonne-bounce-2.log` 沒有 `Paint preview enabled`。
+- **原因**：`FinishLoad3D` 在 `bLoadInFlight` 仍為 true 時呼叫 `SetModelLayout(true)`。水槍只在這個函式裡、且要求不在載入中才會打開，所以這次呼叫把水槍關掉。接著 `SetLoadBusy(false)` 沒有再打開。左鍵因此走鏡頭拖曳。
+- **處置**：`SetLoadBusy(false)` 之後再呼叫一次 `SetModelLayout(bModelLayout)`，載入結束才打開水槍。
+- **再試前檢查**：新的讀卡器 log 要出現 `Paint preview enabled`，再按 A＋左鍵；只按左鍵仍應轉鏡頭。
+- **桌面擷取只拉到前景，錄到的是蓋在上面的別的視窗**（2026-10-26，Yvonne 身形掃描）：`gdigrab` 抓的是桌面上那一塊，不是遊戲畫面本身。`SetForegroundWindow` 之後別的視窗又蓋上來，成片前 2 秒是文字編輯器，12 秒附近是分頁列。另外這次成片沒蓋預覽區左上角的「油漆設定」提示，`Saved/YvonneBounceSpray/record.md` 已經寫過要蓋。修正：擷取前 `SetWindowPos` `HWND_TOPMOST`，錄完改回 `HWND_NOTOPMOST`；裁切後用 `drawbox` 蓋掉提示。再錄的 `Saved/YvonneShapeSweep/frames/v2-*.png` 全程是角色，提示區暗像素為 0，身高與胸部尺寸兩端看得到差。只拉前景不夠，擷取期間視窗要保持最上層。
+
 ## 2026-10-28 協調者整合：PowerShell 傳參數給原生程式時被拆開或吃掉引號
 
 - **錯誤**：PowerShell 5.1 執行 `run_card_reader_development.lua -NoBuild -- -ExecCmds=ok.FaceFlatten` 時，遊戲收到的是 `-ExecCmds=ok .FaceFlatten`，ok.FaceFlatten 沒有執行。另外 `ok-game-mcp.exe call game_goto '{"girl":9}'` 的雙引號被吃掉，回 `key must be a string`。
@@ -4146,3 +4155,5 @@ raw平均21/21 PASS、functional valid=1、792真實slider events、9張影像�
 - **把原生深度貼圖沒有的零件當成「遠」**（2026-11-01，F 組 OK Studio 台前光芒）：齒輪的光芒修好時，我把「Unity 深度貼圖裡沒有的零件」直接當成無限遠的光源，水也照這樣做。原生其實是看到貼圖裡零件**後面**的東西：台前板子後面是水，所以不是光源，我們台前多出光芒。改成只畫原生貼圖有的零件到 custom depth、當貼圖讀之後，又漏了半透明寫深度的玻璃也用 custom depth 存排序用的深度，窗外天空變成近處；查了一陣子 render queue（以為齒輪是 shader 預設 queue）才用「把光束讀到的深度畫出來」看清是玻璃。教訓：替代原生的某張緩衝區時，先把它畫出來和探針錄到的原生貼圖逐區比對，再談光束結果；共用 custom depth 的其他用途（排序）要一併列出。
 - **只藏原生的水就斷定我們這邊是水染色**（2026-11-01，F 組 OK Studio 舞台下方那一條）：原生藏水、藏 heat 那一條都不變，我就推成「是板子伸到水下，我們的水畫在板子上把它染暗」，花了兩輪改水（離開 custom depth、clip、在水之後重畫板子）都沒效果。我們這邊從頭到尾沒有逐層藏一次：藏水那一條還是青色，藏海立方體與 heat 層才變淺，染色的是它們。教訓：比對差異要兩邊都逐層藏，先在我們這邊找出是哪一層造成差異，再動手改；不能只用原生的分層結果推我們的原因。
 - **拆提交時用零上下文套用 hunk，欄位落到錯的位置**（2026-11-01，F 組 OK Studio U43）：同一個 `SOKStudioPanel.h` 有 U43～U45 的 hunk，我用 `git diff -U0` 挑出 U43 那一段、以 `git apply --cached --unidiff-zero` 套到 HEAD，但前面 U44／U45 的 hunk 沒套，行號差了 5 行，七列道具欄位被插到材質編輯器按鈕之後，提交內容和建置驗證過的檔案不同。修正：補一個提交改回原位（d7adff220）。之後拆 hunk 要帶上下文（`git diff -U3` 再挑 hunk），提交後用 `git diff` 確認工作檔和 HEAD 已無差異。
+- **同步時把衝突標記寫進別人的 WIP**（2026-11-01，協調者）：把 origin 合併進 E 時，同步腳本對未提交檔案做三方合併；E 的 okchara WIP 在 `Tools/ok-extract/Cargo.lock` 加了 `gltf`，F 的 U29 提交加了 `fsbex`，同一處衝突，腳本照樣把含 `<<<<<<<` 的結果寫回工作樹，E 的所有 Rust 建置都失敗，由 e-galgame 發現並改成兩行都保留。已改腳本：非 .md 檔合併有衝突時保留原 WIP、回報 `WIP CONFLICT`，不再寫入標記。教訓：同步後掃一遍工作樹未提交檔案有沒有衝突標記，再回報完成。
+- **整合合併時缺 LFS 物件，合併中途中止，半寫的檔案混進工作樹**（2026-11-01，協調者整合）：在 C 執行 `git merge refs/integ/E` 時，E 新提交的 `base_v1/h/se/*.ogg`（LFS）還沒推上 origin，C 的 `.git/lfs/objects` 沒有這些物件，smudge 失敗，合併在寫檔途中中止，HEAD 沒動但 87 個檔案已換成 E 的內容、19 個新檔已建立。處置：對合併觸及的檔案 `git checkout HEAD --`、刪掉新建的檔，確認只剩合併前的 10 個 WIP 檔；再把 E、F 的 `.git/lfs/objects` 用 robocopy 補進 C，重新合併成功。教訓：從本機另一個 checkout 合併前，先比對 `git lfs ls-files` 並把對方的 LFS 物件複製過來（或先在對方 `git lfs push`），合併失敗後要確認工作樹沒有殘留。
