@@ -22,6 +22,8 @@ const SIDES: [(char, [f32; 2]); 4] = [('f', [0., 1.]), ('b', [0., -1.]), ('l', [
 /// out of a thin girl's belly made a 4 cm wide one a pillar.
 pub const BULGE_M: f32 = 0.14;
 const ROUND_M: f32 = 0.055;
+/// How far around a place its normal is averaged for the way it moves (a navel is about 1 cm across).
+const SMOOTH_M: f32 = 0.03;
 /// Bones whose skin never swells (part of a name): a straight clip leaves her low, at the groin, where the skin is on
 /// her waist and thigh bones, so those are not limited. Her own hidden penis mesh (dan bones) is not her skin.
 const STILL: [&str; 12] = ["bust", "arm", "hand", "head", "neck", "shoulder", "leg02", "leg03", "foot", "toe", "knee", "dan"];
@@ -83,6 +85,26 @@ pub fn add(session: &mut OkSession) -> bool {
             for i in 0..3 { e.0[i] += v.n[i] / len; }
             e.1 += v.free;e.2 += 1.;
         }
+        // The way each place moves: its normal averaged over SMOOTH_M around it. A small hollow (her navel) then moves as
+        // one with the skin around it; along their own normals its walls spread apart and opened it into a black hole.
+        let places: Vec<([i64; 3], [f32; 3], [f32; 3])> = verts.iter().filter_map(|v| weld.get(&key(v.p)).map(|e| (key(v.p), v.p, e.0))).collect();
+        let cell = |p: [f32; 3]| p.map(|v| (v / SMOOTH_M).floor() as i64);
+        let mut grid: HashMap<[i64; 3], Vec<usize>> = HashMap::new();
+        for (i, (_, p, _)) in places.iter().enumerate() { grid.entry(cell(*p)).or_default().push(i); }
+        let mut smooth: HashMap<[i64; 3], [f32; 3]> = HashMap::new();
+        for (k, p, _) in &places {
+            if smooth.contains_key(k) { continue; }
+            let c = cell(*p);let mut sum = [0f32; 3];
+            for dx in -1..=1 { for dy in -1..=1 { for dz in -1..=1 {
+                for &i in grid.get(&[c[0] + dx, c[1] + dy, c[2] + dz]).into_iter().flatten() {
+                    let (_, q, n) = places[i];let d2 = (0..3).map(|a| (q[a] - p[a]) * (q[a] - p[a])).sum::<f32>();
+                    if d2 > SMOOTH_M * SMOOTH_M { continue; }
+                    let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();if len < 1e-6 { continue; }
+                    for a in 0..3 { sum[a] += n[a] / len; }
+                }
+            }}}
+            smooth.insert(*k, sum);
+        }
         let mut targets: Vec<(String, Vec<(u32, [f32; 3])>)> = Vec::new();
         for (side, way) in SIDES {
             for (k, h) in HEIGHTS.iter().enumerate() {
@@ -92,7 +114,7 @@ pub fn add(session: &mut OkSession) -> bool {
                     let (x, z) = (kokan[0] + ACROSS[a], kokan[2] + (top[2] - kokan[2]) * h + ALONG_SIDE[a]);
                     let mut deltas = Vec::new();
                     for v in &verts {
-                        let Some((sum, free, count)) = weld.get(&key(v.p)) else { continue; };
+                        let (Some((_, free, count)), Some(sum)) = (weld.get(&key(v.p)), smooth.get(&key(v.p))) else { continue; };
                         let len = (sum[0] * sum[0] + sum[1] * sum[1] + sum[2] * sum[2]).sqrt();if len < 1e-6 { continue; }
                         let n = [sum[0] / len, sum[1] / len, sum[2] / len];let free = (free / count).min(1.);
                         // Facing out on that side; round across her (x) and along her (y).
