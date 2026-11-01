@@ -405,22 +405,39 @@ TArray<SOKStudioPanel::FHit> SOKStudioPanel::SearchCatalog(const FString& Query,
 void SOKStudioPanel::RunQuickSearch()
 {
 	const FOKStudioSettings& S = FOKStudioSettings::Get();
+	TArray<FString> Kinds;
+	if (!QuickKind.IsEmpty()) Kinds.Add(QuickKind);
 	TArray<FHit> Hits;
 	if (QuickMode == 2)
 	{
 		// Recently used, newest first.
-		const TArray<FHit> All = SearchCatalog(QuickQuery, {}, 0, true);
+		const TArray<FHit> All = SearchCatalog(QuickQuery, Kinds, 0, true);
 		for (const FString& K : S.Recent) if (const FHit* H = All.FindByPredicate([&K](const FHit& X) { return X.Key == K; })) Hits.Add(*H);
 	}
 	else
 	{
-		Hits = SearchCatalog(QuickQuery, {}, QuickQuery.IsEmpty() && QuickMode == 0 ? 200 : 600, QuickMode == 3);
+		Hits = SearchCatalog(QuickQuery, Kinds, QuickQuery.IsEmpty() && QuickMode == 0 ? 200 : 600, QuickMode == 3);
 		if (QuickMode == 1) Hits.RemoveAll([&S](const FHit& H) { return !S.Favorites.Contains(H.Key); });
 		if (QuickMode == 3) Hits.RemoveAll([&S](const FHit& H) { return !S.Hidden.Contains(H.Key); });
 	}
 	QuickHits.Reset();
 	for (FHit& H : Hits) QuickHits.Add(MakeShared<FHit>(MoveTemp(H)));
 	if (QuickList) QuickList->RequestListRefresh();
+}
+
+void SOKStudioPanel::ReloadCatalog()
+{
+	FOKStudioCatalog::Reload();
+	const FOKStudioCatalog& C = FOKStudioCatalog::Get();
+	// Nothing may keep pointing into the old catalogue; the open lists are rebuilt from the new one.
+	AnimSyncedTo = nullptr;
+	RebuildSubMenu();
+	RebuildProperties();
+	TArray<FString> Open;
+	for (const TPair<FString, FFloat>& F : Floats) if (F.Value.bOpen) Open.Add(F.Key);
+	for (const FString& Id : Open) DeferFloat(Id);
+	RunQuickSearch();
+	SetStatus(FString::Printf(TEXT("目錄已重新讀取：%d 個道具、%d 個動畫、%d 個特效"), C.Items.Num(), C.Anims.Num(), C.Effects.Num()));
 }
 
 bool SOKStudioPanel::UseHit(const FHit& Hit)
@@ -451,6 +468,16 @@ TSharedRef<SWidget> SOKStudioPanel::BuildQuickSearch()
 	TSharedRef<SHorizontalBox> ModeRow = SNew(SHorizontalBox);
 	for (int32 M = 0; M < 4; ++M) ModeRow->AddSlot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(Modes[M]), [this, M] { QuickMode = M; RunQuickSearch(); DeferFloat(TEXT("quick")); }, 0.f, 18.f, QuickMode == M, 10.f)];
 	static const TMap<FString, FString> KindNames = { { TEXT("item"), TEXT("道具") }, { TEXT("effect"), TEXT("特效") }, { TEXT("map"), TEXT("地圖") }, { TEXT("anim"), TEXT("動畫") }, { TEXT("pose"), TEXT("姿勢") }, { TEXT("card"), TEXT("角色卡") } };
+	// HS2Studio6 筛选列表: one kind only; and 刷新目录.
+	static const TCHAR* Kinds[] = { TEXT(""), TEXT("item"), TEXT("effect"), TEXT("map"), TEXT("anim"), TEXT("pose"), TEXT("card") };
+	TSharedRef<SHorizontalBox> KindRow = SNew(SHorizontalBox);
+	for (const TCHAR* K : Kinds)
+	{
+		const FString Kind = K;
+		const FString* Name = KindNames.Find(Kind);
+		KindRow->AddSlot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(Name ? *Name : TEXT("全種類")), [this, Kind] { QuickKind = Kind; RunQuickSearch(); DeferFloat(TEXT("quick")); }, 0.f, 18.f, QuickKind == Kind, 9.f)];
+	}
+	KindRow->AddSlot().AutoWidth()[Button(FText::FromString(Tip(TEXT("刷新目錄"), TEXT("catalog.reload"))), Cmd(TEXT("catalog.reload")), 0.f, 18.f, false, 9.f)];
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()
 		[
@@ -460,7 +487,8 @@ TSharedRef<SWidget> SOKStudioPanel::BuildQuickSearch()
 				.OnTextChanged_Lambda([this](const FText& T) { QuickQuery = T.ToString(); RunQuickSearch(); })
 			]
 		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 3.f)[ModeRow]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 3.f, 0.f, 0.f)[ModeRow]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 1.f, 0.f, 3.f)[KindRow]
 		+ SVerticalBox::Slot().FillHeight(1.f)
 		[
 			SNew(SBorder).BorderImage(Brush(ListArea())).Padding(1.f)

@@ -516,6 +516,7 @@ public:
 		Float_(TEXT("app.settings"), TEXT("設定"), TEXT("settings"));
 		Float_(TEXT("app.screenshot"), TEXT("截圖"), TEXT("shot"));
 		Float_(TEXT("app.quicksearch"), TEXT("快搜"), TEXT("quick"));
+		Simple(TEXT("catalog.reload"), TEXT("刷新目錄"), [this] { ReloadCatalog(); });
 		Float_(TEXT("app.poselibrary"), TEXT("姿勢庫"), TEXT("poselib"));
 		Float_(TEXT("app.story"), TEXT("播放故事"), TEXT("stories"));
 		AddCommand(TEXT("window.open"), TEXT("開視窗"), [this](const FString& Arg) { if (!Floats.Contains(Arg)) return false; OpenFloat(Arg); return true; });
@@ -1345,6 +1346,10 @@ public:
 	TArray<FHit> SearchCatalog(const FString& Query, const TArray<FString>& Kinds, int32 Limit, bool bHidden = false) const;
 	FString QuickQuery;
 	int32 QuickMode = 0;
+	/** The quick search's kind filter (item, effect, map, anim, pose, card; empty: all). */
+	FString QuickKind;
+	/** 刷新目录: reread the Studio catalogue files and rebuild what lists them. */
+	void ReloadCatalog();
 	TArray<TSharedPtr<FHit>> QuickHits;
 	TSharedPtr<SListView<TSharedPtr<FHit>>> QuickList;
 	void RunQuickSearch();
