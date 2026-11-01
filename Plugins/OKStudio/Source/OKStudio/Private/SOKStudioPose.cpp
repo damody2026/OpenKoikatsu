@@ -446,6 +446,38 @@ void SOKStudioPanel::IkFromFk(FOKSceneObject& X, int32 Part)
 	SetStatus(FString::Printf(TEXT("IK←FK：%d 個目標"), Effectors.Num()));
 }
 
+void SOKStudioPanel::IkFromAnimation(FOKSceneObject& X)
+{
+	if (X.Kind != EOKSceneObjectKind::Character || !Game->SceneActor) return;
+	const int32 Id = X.Id;
+	// HS2Studio6 动画位置姿态: the targets go where the animation alone puts the limbs. FK and IK go off for a moment,
+	// the pose is read, FK comes back and the targets (those on, or all of them) are set there.
+	TArray<int32> Effectors;
+	for (const FOKSceneIkTarget& T : X.Character.Ik) Effectors.Add(T.Effector);
+	if (Effectors.IsEmpty()) for (int32 E = 0; E < 13; ++E) Effectors.Add(E);
+	const TArray<FOKSceneFkBone> Fk = X.Character.Fk;
+	X.Character.Fk.Reset();
+	X.Character.Ik.Reset();
+	Changed();
+	Game->SyncDocumentNow();
+	Game->SceneActor->UpdateLooks(0.f);
+	AKKPreviewActor* P = Game->SceneActor->PreviewOf(Id);
+	FOKSceneObject* Y = Game->Document->Find(Id);
+	if (!Y) return;
+	Y->Character.Fk = Fk;
+	FString Error;
+	if (!P || !P->Session.PrepareStudioIk(Error)) { Changed(); SetStatus(TEXT("動畫位置姿態失敗：") + Error); return; }
+	P->bStudioIkReady = true;
+	for (int32 E : Effectors)
+	{
+		FVector Unity;
+		if (P->Session.IkEffectorPosition(E, Unity)) Y->Character.Ik.Add({ E, AKKPreviewActor::UnityToActorLocal(Unity) });
+	}
+	Changed();
+	DeferRebuild();
+	SetStatus(FString::Printf(TEXT("IK←動作：%d 個目標"), Y->Character.Ik.Num()));
+}
+
 void SOKStudioPanel::FkFromPose(FOKSceneObject& Object, int32 Part)
 {
 	FOKSceneObject* Y = &Object;
@@ -574,7 +606,7 @@ void SOKStudioPanel::FkPage(FOKSceneObject& O)
 		for (const TPair<const TCHAR*, TFunction<void()>>& B : List) Box->AddSlot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(B.Key), B.Value, 0.f, 18.f, false, 10.f)];
 		Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[Box];
 	};
-	Buttons({ { TEXT("FK←姿勢"), Cmd(TEXT("pose.fkfrompose")) }, { TEXT("IK←FK"), Cmd(TEXT("pose.ikfromfk")) }, { TEXT("清除 FK"), [this] { if (FOKSceneObject* X = Obj()) { X->Character.Fk.Reset(); Changed(); DeferRebuild(); } } } });
+	Buttons({ { TEXT("FK←姿勢"), Cmd(TEXT("pose.fkfrompose")) }, { TEXT("FK←IK"), Cmd(TEXT("pose.fkfromik")) }, { TEXT("IK←FK"), Cmd(TEXT("pose.ikfromfk")) }, { TEXT("清除 FK"), [this] { if (FOKSceneObject* X = Obj()) { X->Character.Fk.Reset(); Changed(); DeferRebuild(); } } } });
 	Buttons({ { TEXT("鏡像全部"), Cmd(TEXT("pose.mirror"), TEXT("all")) }, { TEXT("左→右"), Cmd(TEXT("pose.mirror"), TEXT("l2r")) }, { TEXT("右→左"), Cmd(TEXT("pose.mirror"), TEXT("r2l")) } });
 	Buttons({ { TEXT("複製姿勢"), Cmd(TEXT("pose.copy")) }, { TEXT("貼上姿勢"), Cmd(TEXT("pose.paste")) }, { TEXT("姿勢庫…"), Cmd(TEXT("app.poselibrary")) } });
 	// The chosen bone on the timeline (its own track: it moves between the keys that hold it).
@@ -697,6 +729,7 @@ void SOKStudioPanel::IkPage(FOKSceneObject& O)
 		}, 0.f, 18.f, false, 10.f)];
 	Props->AddSlot().AutoHeight().Padding(0.f, 1.f)[Weights];
 	TSharedRef<SHorizontalBox> Row1 = SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("IK←動作")), Cmd(TEXT("pose.ikfromanim")), 0.f, 18.f, false, 10.f)]
 		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("IK←FK")), Cmd(TEXT("pose.ikfromfk")), 0.f, 18.f, false, 10.f)]
 		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("FK←IK")), Cmd(TEXT("pose.fkfromik")), 0.f, 18.f, false, 10.f)]
 		+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 1.f, 0.f)[Button(FText::FromString(TEXT("鏡像")), Cmd(TEXT("pose.mirror"), TEXT("all")), 0.f, 18.f, false, 10.f)]

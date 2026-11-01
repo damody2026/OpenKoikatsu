@@ -588,6 +588,7 @@ public:
 		// Pose.
 		AddCommand(TEXT("pose.mirror"), TEXT("鏡像姿勢"), [this](const FString& Arg) { FOKSceneObject* X = Obj(); return X && MirrorPose(*X, Arg == TEXT("l2r") ? 1 : Arg == TEXT("r2l") ? 2 : 0); });
 		Simple(TEXT("pose.ikfromfk"), TEXT("IK←FK"), [this] { if (FOKSceneObject* X = Obj()) IkFromFk(*X); });
+		Simple(TEXT("pose.ikfromanim"), TEXT("IK←動作"), [this] { if (FOKSceneObject* X = Obj()) IkFromAnimation(*X); });
 		AddCommand(TEXT("pose.fkinit"), TEXT("FK 部位初始化（參數：部位 0..6）"), [this](const FString& Arg) { FOKSceneObject* X = Obj(); if (!X || X->Kind != EOKSceneObjectKind::Character) return false; FkFromPose(*X, FMath::Clamp(FCString::Atoi(*Arg), 0, 6)); return true; });
 		AddCommand(TEXT("pose.ikreset"), TEXT("IK 部位復位（參數：部位 0..4）"), [this](const FString& Arg) { FOKSceneObject* X = Obj(); if (!X || X->Kind != EOKSceneObjectKind::Character) return false; IkFromFk(*X, FMath::Clamp(FCString::Atoi(*Arg), 0, 4)); return true; });
 		Simple(TEXT("pose.fkfrompose"), TEXT("FK←目前姿勢"), [this] { if (FOKSceneObject* X = Obj()) FkFromPose(*X); });
@@ -1374,6 +1375,8 @@ public:
 	void HandleSizes();
 	/** IK targets onto where the limbs are under FK; Part >= 0: only that IK part's targets (HS2Studio6 IK 复位). */
 	void IkFromFk(FOKSceneObject& X, int32 Part = -1);
+	/** IK targets onto where the animation alone (no FK, no IK) puts the limbs (HS2Studio6 动画位置姿态). */
+	void IkFromAnimation(FOKSceneObject& X);
 	/** FK values from the current pose; Part >= 0: only that FK part (HS2Studio6 FK 初始化). */
 	void FkFromPose(FOKSceneObject& X, int32 Part = -1);
 	void FkFromIk(FOKSceneObject& X);
